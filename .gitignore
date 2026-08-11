@@ -1,0 +1,25 @@
+# build outputs
+node_modules/
+out/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# vendor upstream (reference only, keep pristine)
+vendor/
+
+# rust
+target/
+
+# logs
+*.log
+logs/
+
+# os
+.DS_Store
+Thumbs.db
+
+# local env
+.env
+.env.local
+bin/

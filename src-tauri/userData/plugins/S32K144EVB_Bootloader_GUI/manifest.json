@@ -1,0 +1,25 @@
+{
+  "id": "S32K144EVB_Bootloader_GUI",
+  "name": "S32K144EVB Bootloader GUI",
+  "version": "0.1.0",
+  "description": "用于测试基于S32K144EVB的Bootloader的上位机，支持UART，CAN等通信协议",
+  "author": "EamonCai",
+  "mainEntry": "dist/main/index.cjs",
+  "icon": "S32K144EVB.jpg",
+  "readme": "ReleaseNote.md",
+  "extensions": [
+    {
+      "targetTab": "test",
+      "items": [
+        {
+          "type": "button",
+          "id": "S32K144EVB_Bootloader_GUI-button",
+          "label": "Bootloader",
+          "icon": "S32K144EVB.jpg",
+          "onClick": "showBootloader",
+          "entry": "dist/renderer/index.html"
+        }
+      ]
+    }
+  ]
+}

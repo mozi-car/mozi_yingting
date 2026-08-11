@@ -1,0 +1,207 @@
+
+LIN_description_file;
+LIN_protocol_version = "{{this.global.LIN_protocol_version}}";
+LIN_language_version = "{{this.global.LIN_language_version}}";
+LIN_speed = {{this.global.LIN_speed}} kbps;
+{{#if this.global.Channel_name}}Channel_name = {{this.global.Channel_name}};{{/if}}
+
+
+Nodes {
+  Master: {{this.node.master.nodeName}}, {{this.node.master.timeBase}} ms, {{this.node.master.jitter}} ms ;
+  Slaves: {{#each this.node.salveNode as |item index|}}{{item}}{{#unless @last}}, {{/unless}}{{/each}} ;
+}
+
+Signals {
+{{#each this.signals}}
+  {{this.signalName}}: {{this.signalSizeBits}}, {{#eq this.singleType 'Scalar'}}{{this.initValue}}{{else}}{ {{#each this.initValue as |item index|}}{{item}}{{#unless @last}}, {{/unless}}{{/each}} }{{/eq}}, {{this.punishedBy}}, {{#each this.subscribedBy as |item index|}}{{item}}{{#unless @last}}, {{/unless}}{{/each}} ;
+{{/each}}
+}
+
+{{#if (objLen this.signalGroups)}}
+Signal_groups {
+{{#each this.signalGroups}}
+  {{this.name}}:{{this.size}} {
+    {{#each this.signals}}
+    {{this.name}}, {{this.offset}};
+    {{/each}}
+  }
+{{/each}}
+}
+{{/if}}
+
+Diagnostic_signals {
+  MasterReqB0: 8, 0 ;
+  MasterReqB1: 8, 0 ;
+  MasterReqB2: 8, 0 ;
+  MasterReqB3: 8, 0 ;
+  MasterReqB4: 8, 0 ;
+  MasterReqB5: 8, 0 ;
+  MasterReqB6: 8, 0 ;
+  MasterReqB7: 8, 0 ;
+  SlaveRespB0: 8, 0 ;
+  SlaveRespB1: 8, 0 ;
+  SlaveRespB2: 8, 0 ;
+  SlaveRespB3: 8, 0 ;
+  SlaveRespB4: 8, 0 ;
+  SlaveRespB5: 8, 0 ;
+  SlaveRespB6: 8, 0 ;
+  SlaveRespB7: 8, 0 ;
+}
+
+
+
+Frames {
+{{#each this.frames}}
+  {{this.name}}: {{this.id}}, {{this.publishedBy}}, {{this.frameSize}} {
+    {{#each this.signals}}
+    {{this.name}}, {{this.offset}} ;
+    {{/each}}
+  }
+{{/each}}
+}
+
+{{#if (objLen this.sporadicFrames)}}
+Sporadic_frames {
+{{#each this.sporadicFrames}}
+  {{this.name}}: {{#each this.frameNames as |item index|}}{{item}}{{#unless @last}}, {{/unless}}{{/each}} ;
+{{/each}}
+}
+{{/if}}
+
+{{#if (objLen this.eventTriggeredFrames)}}
+Event_triggered_frames {
+{{#each this.eventTriggeredFrames}}
+  {{this.name}}: {{this.schTableName}}, {{this.frameId}}, {{#each this.frameNames as |item index|}}{{item}}{{#unless @last}}, {{/unless}}{{/each}} ;
+{{/each}}
+}
+{{/if}}
+
+Diagnostic_frames {
+  MasterReq: 0x3c {
+    MasterReqB0, 0 ;
+    MasterReqB1, 8 ;
+    MasterReqB2, 16 ;
+    MasterReqB3, 24 ;
+    MasterReqB4, 32 ;
+    MasterReqB5, 40 ;
+    MasterReqB6, 48 ;
+    MasterReqB7, 56 ;
+  }
+  SlaveResp: 0x3d {
+    SlaveRespB0, 0 ;
+    SlaveRespB1, 8 ;
+    SlaveRespB2, 16 ;
+    SlaveRespB3, 24 ;
+    SlaveRespB4, 32 ;
+    SlaveRespB5, 40 ;
+    SlaveRespB6, 48 ;
+    SlaveRespB7, 56 ;
+  }
+}
+
+Node_attributes {
+{{#each this.nodeAttrs}}
+  {{@key}}{
+    LIN_protocol = "{{this.LIN_protocol}}" ;
+    configured_NAD = {{this.configured_NAD}} ;
+{{#isDefined this.initial_NAD}}
+    initial_NAD = {{this.initial_NAD}} ;
+{{/isDefined}}
+    product_id = {{this.supplier_id}}, {{this.function_id}}{{#isDefined this.variant}}, {{this.variant}}{{/isDefined}} ;
+    response_error = {{this.response_error}} ;
+{{#isDefined this.fault_state_signals}}
+{{#gte this.fault_state_signals.length 1}}
+    fault_state_signals = {{#each this.fault_state_signals as |item index|}}{{item}}{{#unless @last}}, {{/unless}}{{/each}} ;
+{{/gte}}
+{{/isDefined}}
+{{#isDefined this.P2_min}}
+    P2_min = {{this.P2_min}} ms ;
+{{/isDefined}}
+{{#isDefined this.ST_min}}
+    ST_min = {{this.ST_min}} ms ;
+{{/isDefined}}
+{{#isDefined this.N_As_timeout}}
+    N_As_timeout = {{this.N_As_timeout}} ms ;
+{{/isDefined}}
+{{#isDefined this.N_Cr_timeout}}
+    N_Cr_timeout = {{this.N_Cr_timeout}} ms ;
+{{/isDefined}}
+{{#isDefined this.configFrames}}
+    configurable_frames {
+{{#each this.configFrames}}
+      {{this}} ;
+{{/each}}
+    }
+{{/isDefined}}
+  }
+{{/each}}
+}
+
+Schedule_tables {
+{{#each this.schTables}}
+  {{this.name}} {
+{{#each this.entries}}
+{{#if this.isCommand}}
+{{#eq this.name 'AssignFrameId'}}
+    {{this.name}} { {{this.AssignFrameId.nodeName}}, {{this.AssignFrameId.frameName}} } delay {{this.delay}} ms ;
+{{/eq}}
+{{#eq this.name 'AssignNAD'}}
+    {{this.name}} { {{this.AssignNAD.nodeName}} } delay {{this.delay}} ms ;
+{{/eq}}
+{{#eq this.name 'ConditionalChangeNAD'}}
+    {{this.name}} { {{this.ConditionalChangeNAD.nad}}, {{this.ConditionalChangeNAD.id}}, {{this.ConditionalChangeNAD.byte}}, {{this.ConditionalChangeNAD.mask}}, {{this.ConditionalChangeNAD.inv}}, {{this.ConditionalChangeNAD.newNad}} } delay {{this.delay}} ms ;
+{{/eq}}
+{{#eq this.name 'DataDump'}}
+    {{this.name}} { {{this.DataDump.nodeName}}, {{this.DataDump.D1}}, {{this.DataDump.D2}}, {{this.DataDump.D3}}, {{this.DataDump.D4}}, {{this.DataDump.D5}} } delay {{this.delay}} ms ;
+{{/eq}}
+{{#eq this.name 'SaveConfiguration'}}
+    {{this.name}} { {{this.AssignNASaveConfigurationD.nodeName}} } delay {{this.delay}} ms ;
+{{/eq}}
+{{#eq this.name 'AssignFrameIdRange'}}
+    {{this.name}} { {{this.AssignFrameIdRange.nodeName}}, {{this.AssignFrameIdRange.frameIndex}} {{#each this.AssignFrameIdRange.framePID}}, {{this}}{{/each}} } delay {{this.delay}} ms ;
+{{/eq}}
+{{#eq this.name 'FreeFormat'}}
+    {{this.name}} { {{#each this.FreeFormat.D as |item index|}}{{item}}{{#unless @last}}, {{/unless}}{{/each}} } delay {{this.delay}} ms ;
+{{/eq}}
+{{#eq this.name 'DiagnosticMasterReq'}}
+    MasterReq delay {{this.delay}} ms ;
+{{/eq}}
+{{#eq this.name 'DiagnosticSlaveResp'}}
+    SlaveResp delay {{this.delay}} ms ;
+{{/eq}}
+{{else}}
+    {{this.name}} delay {{this.delay}} ms ;
+{{/if}}
+{{/each}}
+  }
+{{/each}}
+}
+
+
+Signal_encoding_types {
+{{#each this.signalEncodeTypes}}
+  {{this.name}} {
+{{#each this.encodingTypes}} 
+{{#eq this.type 'physicalValue'}}  
+    physical_value, {{this.physicalValue.minValue}}, {{this.physicalValue.maxValue}}, {{this.physicalValue.scale}}, {{this.physicalValue.offset}}{{#isTruthy this.physicalValue.textInfo}}, "{{this.physicalValue.textInfo}}"{{/isTruthy}} ; 
+{{/eq}}
+{{#eq this.type 'logicalValue'}}  
+    logical_value, {{this.logicalValue.signalValue}}{{#isTruthy this.logicalValue.textInfo}}, "{{this.logicalValue.textInfo}}"{{/isTruthy}} ; 
+{{/eq}}
+{{#eq this.type 'asciiValue'}}  
+    ascii_value ; 
+{{/eq}}
+{{#eq this.type 'bcdValue'}}  
+    bcd_value ; 
+{{/eq}}
+{{/each}}
+  }
+{{/each}}
+}
+
+Signal_representation {
+{{#each this.signalRep}}
+  {{@key}}: {{#each this as |item index|}}{{item}}{{#unless @last}}, {{/unless}}{{/each}} ;
+{{/each}}
+}
+

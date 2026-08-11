@@ -1,0 +1,421 @@
+// stores/counter.js
+import { Action, ElMessage, ElMessageBox } from 'element-plus'
+import { defineStore } from 'pinia'
+import { useDataStore } from './data'
+import { sortBy, toPairs, fromPairs, cloneDeep, assign, merge } from 'lodash'
+import { error, info } from 'electron-log'
+import { useRuntimeStore } from './runtime'
+import i18next from 'i18next'
+import { markRaw } from 'vue'
+
+export interface ProjectInfo {
+  name: string
+  path: string
+}
+
+export interface Project {
+  displayName?: string
+  desc?: string
+  wins: Record<
+    string,
+    {
+      pos: { x: number; y: number; w: number; h: number }
+      backupPos?: { x: number; y: number; w: number; h: number }
+      title: string
+      label: string
+      id: string
+      layoutType?: 'bottom' | 'top' | 'left' | 'right'
+      options: {
+        name?: string
+        params: Record<string, any>
+      }
+      isMax?: boolean
+      hide?: boolean
+      isExternal?: boolean
+    }
+  >
+  example?: {
+    catalog: string
+  }
+}
+
+export interface ProjectList {
+  name: string
+  path: string
+  pined?: boolean
+  lastOpenTime: number
+}
+export interface State {
+  open: boolean
+  projectInfo: ProjectInfo
+  projectDirty: boolean
+  project: Project
+}
+
+export const useProjectList = defineStore('projectList', {
+  state: () => {
+    return {
+      projectList: (window.store.get('projectList') as ProjectList[]) || []
+    }
+  },
+  actions: {
+    pinProject(item: ProjectList) {
+      const eitem = this.projectList.find((v) => v.path == item.path && v.name == item.name)
+      if (eitem) {
+        const index = this.projectList.indexOf(eitem)
+        this.projectList[index].pined = !this.projectList[index].pined
+        window.store.set('projectList', cloneDeep(this.projectList))
+      }
+    },
+    deleteProject(item: ProjectList) {
+      const eitem = this.projectList.find((v) => v.path == item.path && v.name == item.name)
+      if (eitem) {
+        const index = this.projectList.indexOf(eitem)
+        this.projectList.splice(index, 1)
+        window.store.set('projectList', cloneDeep(this.projectList))
+      }
+    }
+  }
+})
+
+const CANDB_VERSION_CANMARTIX = 'canmartix'
+
+function filterValidCanDBs(canData: Record<string, any>): Record<string, any> {
+  const valid: Record<string, any> = {}
+  for (const key in canData) {
+    if (canData[key]?.version === CANDB_VERSION_CANMARTIX) {
+      valid[key] = canData[key]
+    }
+  }
+  return valid
+}
+
+function getInvalidCanDBKeys(canData: Record<string, any>): string[] {
+  return Object.keys(canData).filter((key) => canData[key]?.version !== CANDB_VERSION_CANMARTIX)
+}
+
+function printNestedKeys(obj: any, prefix = '') {
+  for (const key in obj) {
+    // 构建当前key的完整路径
+    const currentPath = prefix ? `${prefix}.${key}` : key
+
+    // 打印当前key的路径
+    info(currentPath)
+
+    // 如果当前值是对象且不是null，则递归处理
+    if (typeof obj[key] === 'object' && obj[key] !== null) {
+      printNestedKeys(obj[key], currentPath)
+    }
+  }
+}
+export const useProjectStore = defineStore('project', {
+  state: (): State => ({
+    projectDirty: false,
+    open: false,
+    projectInfo: {
+      name: 'Untitled',
+      path: ''
+    },
+    project: {
+      wins: {}
+    }
+  }),
+  // could also be defined as
+  // state: () => ({ count: 0 })
+  actions: {
+    async createNewProject() {
+      const val = await this.closeProject()
+      if (val) {
+        const data = useDataStore()
+        data.$reset()
+        const runtime = useRuntimeStore()
+        runtime.$reset()
+        this.open = true
+        this.projectDirty = true
+        this.router.push('/uds')
+      }
+    },
+    async createExampleProject(example: string) {
+      const val = await this.closeProject()
+      if (val) {
+        const r = await window.electron.ipcRenderer.invoke('ipc-fs-readFile', example, 'utf-8')
+        try {
+          const rdata = JSON.parse(r)
+          const canData = rdata.data.database?.can
+          if (canData) {
+            const invalidKeys = getInvalidCanDBKeys(canData)
+            if (invalidKeys.length > 0) {
+              await ElMessageBox.alert(
+                i18next.t('project.messages.canDbVersionMismatch'),
+                i18next.t('project.dialog.warningTitle'),
+                {
+                  confirmButtonText: 'OK',
+                  type: 'warning',
+                  buttonSize: 'small'
+                }
+              )
+              rdata.data.database.can = filterValidCanDBs(canData)
+            }
+          }
+          const data = useDataStore()
+          data.$patch((ss) => {
+            if (rdata.data.database?.can) {
+              for (const key in rdata.data.database.can) {
+                markRaw(rdata.data.database.can[key])
+              }
+            }
+            assign(ss, rdata.data)
+          })
+          this.project = rdata.project
+          const info = window.path.parse(example)
+          this.projectInfo.name = info.base
+          this.projectInfo.path = info.dir
+          this.open = true
+          this.projectDirty = false
+          await this.saveProject()
+          this.router.push('/uds')
+        } catch (e) {
+          ElMessage.error(i18next.t('project.messages.invalidProjectFile', { file: example }))
+        }
+      }
+    },
+    async openProject() {
+      {
+        const r = await window.electron.ipcRenderer.invoke('ipc-show-open-dialog', {
+          title: i18next.t('project.dialog.openTitle'),
+          properties: ['openFile'],
+          filters: [{ name: 'yingting', extensions: ['ecb'] }]
+        })
+        const file = r.filePaths[0]
+        if (file == undefined) {
+          return
+        }
+        if (this.open) {
+          await this.closeProject(file)
+        }
+        await this.openProjectByPath(file, true)
+      }
+    },
+    async openProjectByPath(file: string, skipClose = false) {
+      if (!skipClose) {
+        skipClose = await this.closeProject(file)
+      }
+      if (skipClose) {
+        window.electron.ipcRenderer
+          .invoke('ipc-fs-readFile', file, 'utf-8')
+          .then(async (r) => {
+            try {
+              const rdata = JSON.parse(r)
+              const parse = window.path.parse(file)
+
+              this.projectInfo.name = parse.base
+              this.projectInfo.path = parse.dir
+              const data = useDataStore()
+
+              const canData = rdata.data.database?.can
+              if (canData) {
+                const invalidKeys = getInvalidCanDBKeys(canData)
+                if (invalidKeys.length > 0) {
+                  await ElMessageBox.alert(
+                    i18next.t('project.messages.canDbVersionMismatch'),
+                    i18next.t('project.dialog.warningTitle'),
+                    {
+                      confirmButtonText: 'OK',
+                      type: 'warning',
+                      buttonSize: 'small'
+                    }
+                  )
+                }
+              }
+
+              data.$patch((ss) => {
+                if (canData) {
+                  delete rdata.data.database.can
+                }
+
+                merge(ss, rdata.data)
+
+                if (canData) {
+                  const validCanData = filterValidCanDBs(canData)
+                  for (const key in validCanData) {
+                    validCanData[key].id = key
+                    ss.database.can[key] = markRaw(validCanData[key])
+                  }
+                }
+
+                //TODO: remove id in 0.9 version
+                for (const key in ss.database.lin) {
+                  ss.database.lin[key].id = key
+                }
+
+                //TODO: remove convert freq to number in 0.9 version
+                for (const device of Object.values(ss.devices)) {
+                  if (device.type == 'can' && device.canDevice) {
+                    device.canDevice.bitrate.freq = Number(device.canDevice.bitrate.freq)
+                    if (device.canDevice.bitratefd) {
+                      device.canDevice.bitratefd.freq = Number(device.canDevice.bitratefd.freq)
+                    }
+                  }
+                }
+              })
+              this.project = rdata.project
+              this.open = true
+
+              this.router.push('/uds')
+              //add to history
+              this.addToHistory(file)
+            } catch (e) {
+              ElMessage.error(i18next.t('project.messages.invalidProjectFile', { file: file }))
+            }
+          })
+          .catch((e) => {
+            error(e)
+            ElMessage.error(i18next.t('project.messages.openProjectFailed', { file: file }))
+          })
+      }
+    },
+    addToHistory(file: string) {
+      const projectList = useProjectList()
+      const parse = window.path.parse(file)
+      const exist = projectList.projectList.find((v) => v.path == parse.dir && v.name == parse.base)
+      let pined
+      if (exist) {
+        //remove and reinsert
+        pined = exist.pined
+        const index = projectList.projectList.indexOf(exist)
+        projectList.projectList.splice(index, 1)
+      }
+      //put it first
+      projectList.projectList.unshift({
+        name: parse.base,
+        path: parse.dir,
+        pined: pined,
+        lastOpenTime: Date.now()
+      })
+      const historyLimit = (window.store.get('historyLimit') as number) || 20
+      if (projectList.projectList.length > historyLimit) {
+        projectList.projectList.pop()
+      }
+      window.store.set('projectList', cloneDeep(projectList.projectList))
+    },
+
+    async saveProject() {
+      if (this.open) {
+        if (this.projectInfo.path == '') {
+          const res = await window.electron.ipcRenderer.invoke('ipc-show-save-dialog', {
+            title: i18next.t('project.dialog.saveTitle'),
+            defaultPath: 'Config.ecb',
+            filters: [{ name: 'yingting', extensions: ['ecb'] }]
+          })
+          if (res.canceled || res.filePath == undefined) {
+            return
+          }
+          const parse = window.path.parse(res.filePath)
+
+          this.projectInfo.path = parse.dir
+          this.projectInfo.name = parse.base
+        }
+        const projectData = useDataStore()
+
+        const data = cloneDeep({
+          project: this.project,
+          data: projectData.getData()
+        })
+
+        //sort
+        const sortedPairsProject = sortBy(toPairs(data), 0)
+        const sortedData = fromPairs(sortedPairsProject)
+
+        const fullPath = window.path.join(this.projectInfo.path, this.projectInfo.name)
+        // printNestedKeys(sortedData)
+        try {
+          await window.electron.ipcRenderer.invoke(
+            'ipc-fs-writeFile',
+            fullPath,
+            JSON.stringify(sortedData, null, 2)
+          )
+        } catch (e: any) {
+          error(e)
+          ElMessageBox({
+            title: i18next.t('project.dialog.saveTitle'),
+            message: `${e.toString()}`,
+            type: 'error',
+            buttonSize: 'small'
+          })
+          return
+        }
+
+        this.projectDirty = false
+        //update projectList
+        //if file exist
+        this.addToHistory(fullPath)
+      }
+    },
+    async closeProject(filePath?: string): Promise<boolean> {
+      const p = new Promise<boolean>((resolve, reject) => {
+        if (filePath && this.open && this.projectDirty && window.params.id == undefined) {
+          if (
+            window.path.normalize(window.path.join(this.projectInfo.path, this.projectInfo.name)) ==
+            window.path.normalize(filePath)
+          ) {
+            resolve(true)
+            return
+          }
+          //工程没有保存，关闭会丢失数据
+          ElMessageBox.confirm(
+            i18next.t('project.dialog.unsavedChanges'),
+            i18next.t('project.dialog.warningTitle'),
+            {
+              confirmButtonText: i18next.t('project.dialog.saveButton'),
+              cancelButtonText: i18next.t('project.dialog.dontSaveButton'),
+              type: 'warning',
+              buttonSize: 'small',
+              distinguishCancelAndClose: true
+            }
+          )
+            .then(() => {
+              this.saveProject()
+                .then(() => {
+                  this.$reset()
+                  const data = useDataStore()
+                  data.$reset()
+                  const runtime = useRuntimeStore()
+                  runtime.$reset()
+                  resolve(true)
+                })
+                .catch((e) => {
+                  error('Save project failed', e)
+                  ElMessage.error(i18next.t('project.messages.saveProjectFailed'))
+                  resolve(false)
+                })
+            })
+            .catch((action: Action) => {
+              if (action == 'cancel') {
+                this.$reset()
+                const data = useDataStore()
+                data.$reset()
+                const runtime = useRuntimeStore()
+                runtime.$reset()
+                resolve(true)
+              } else {
+                resolve(false)
+              }
+            })
+        } else {
+          this.$reset()
+          const data = useDataStore()
+          data.$reset()
+          const runtime = useRuntimeStore()
+          runtime.$reset()
+          resolve(true)
+        }
+      })
+      const result = await p
+      if (result) {
+        window.electron.ipcRenderer.send('ipc-close-others-windows')
+      }
+
+      return result
+    }
+  }
+})

@@ -1,0 +1,944 @@
+/* eslint-disable no-var */
+import { transport, createLogger, format, Logger, transports } from 'winston'
+import type { Format } from 'logform'
+import Transport from 'winston-transport'
+import { CAN_ERROR_ID, CanAddr, CanMessage, CanMsgType, getTsUs } from './share/can'
+import EventEmitter from 'events'
+import type { Sequence, ServiceItem } from './share/uds'
+import { PayloadType } from './doip'
+import type { LinMsg } from './share/lin'
+import type { SerialMessage } from './share/serial'
+import type { TestEvent } from 'node:test/reporters'
+import { setVar as setVarMain, setVarByKey, getVar as getVarMain } from './var'
+import { VarItem } from 'src/preload/data'
+import { v4 } from 'uuid'
+import type { SomeipMessage, VsomeipAvailabilityInfo } from './share/someip'
+import type { OsEvent } from './share/osEvent'
+import path from 'path'
+import dayjs from 'dayjs'
+
+global.deviceIndexMap = new Map<string, number>()
+
+type LogFunc = (...args: any[]) => Transport
+
+export function createLogs(logs: LogFunc[], formats: Format[]) {
+  global.sysLog = createLogger({
+    transports: logs.map((t) => t()),
+    format: format.combine(format.json(), format.label({ label: 'System' }), ...formats)
+  })
+  global.scriptLog = createLogger({
+    transports: logs.map((t) => t()),
+    format: format.combine(format.json(), format.label({ label: 'Script' }), ...formats)
+  })
+
+  for (const l of logs) {
+    addTransport(l)
+  }
+  for (const f of formats) {
+    addFormat(f)
+  }
+}
+
+class Base extends Transport {
+  constructor(opts?: Transport.TransportStreamOptions) {
+    super(opts)
+    //
+    // Consume any custom options here. e.g.:
+    // - Connection information for databases
+    // - Authentication information for APIs (e.g. loggly, papertrail,
+    //   logentries, etc.).
+    //
+  }
+
+  log(info: any, callback: () => void) {
+    if (process.env.VITEST) {
+      console.table(info.message)
+    }
+    // Perform the writing to the remote service
+    callback()
+  }
+}
+const instanceFormat = format((info, opts: any) => {
+  info.instance = opts.instance
+  return info
+})
+const externalTransport: { id: string; t: () => Transport }[] = []
+const deviceTransport: { id: string; t: () => Transport }[] = []
+export function addTransport(t: () => Transport): string {
+  const id = v4()
+  externalTransport.push({ id, t })
+  return id
+}
+export function addDeviceTransport(t: () => Transport): string {
+  const id = v4()
+  deviceTransport.push({ id, t })
+  return id
+}
+
+export function removeDeviceTransport(id: string) {
+  const index = deviceTransport.findIndex((t) => t.id == id)
+  if (index != -1) {
+    deviceTransport.splice(index, 1)
+  }
+}
+export function removeTransport(id: string) {
+  const index = externalTransport.findIndex((t) => t.id == id)
+  if (index != -1) {
+    externalTransport.splice(index, 1)
+  }
+}
+
+const externalFormat: Format[] = []
+export function addFormat(f: Format) {
+  externalFormat.push(f)
+}
+export function clearFormat() {
+  externalFormat.splice(0, externalFormat.length)
+}
+
+export class CanLOG {
+  vendor: string
+  log: Logger
+
+  deviceId: string
+  constructor(
+    vendor: string,
+    instance: string,
+    deviceId: string,
+    private event: EventEmitter
+  ) {
+    this.deviceId = deviceId
+    this.vendor = vendor
+    const et1 = externalTransport.map((t) => t.t())
+    const dt1 = deviceTransport.map((t) => t.t())
+    this.log = createLogger({
+      transports: [new Base(), ...et1, ...dt1],
+      format: format.combine(
+        format.json(),
+        instanceFormat({ instance: instance }),
+        format.label({ label: `Can-${vendor}` }),
+        ...externalFormat
+      )
+    })
+
+    //check device id
+    const combinedLogs = this.log.transports.filter((transport) => {
+      return (transport as any).devices && (transport as any).devices.indexOf(this.deviceId) == -1
+    })
+
+    for (const log of combinedLogs) {
+      this.log.remove(log)
+    }
+  }
+  close() {
+    this.log.close()
+
+    this.event.removeAllListeners()
+  }
+  canBase(data: CanMessage) {
+    this.log.debug({
+      method: 'canBase',
+      deviceId: this.deviceId,
+      data
+    })
+    this.event.emit('can-frame', data)
+  }
+
+  setOption(cmd: string, val: any) {
+    this.log.info({
+      method: 'setOption',
+      deviceId: this.deviceId,
+      data: { cmd, val }
+    })
+  }
+  error(ts: number, msg?: string) {
+    this.log.error({
+      method: 'canError',
+      deviceId: this.deviceId,
+      data: {
+        ts: ts,
+        msg: msg
+      }
+    })
+  }
+}
+
+export class UdsLOG {
+  log: Logger
+  methodPrefix: string = ''
+  startTime = Date.now()
+  constructor(name: string, instance?: string) {
+    const et = externalTransport.map((t) => t.t())
+    const formatList = [format.json(), format.label({ label: name })]
+    if (instance) {
+      formatList.push(instanceFormat({ instance: instance }))
+    }
+    this.log = createLogger({
+      transports: [new Base(), ...et],
+      format: format.combine(...formatList, ...externalFormat)
+    })
+  }
+  addTransport(t: Transport) {
+    this.log.add(t)
+  }
+  removeTransport(t: Transport) {
+    this.log.remove(t)
+  }
+  sent(testerid: string, service: ServiceItem, ts: number, recvData?: Buffer, msg?: string) {
+    this.log.info({
+      method: this.methodPrefix + 'udsSent',
+      id: testerid,
+      data: {
+        service,
+        ts,
+        recvData,
+        msg
+      }
+    })
+  }
+  recv(testerid: string, service: ServiceItem, ts: number, recvData?: Buffer, msg?: string) {
+    this.log.info({
+      method: this.methodPrefix + 'udsRecv',
+      id: testerid,
+      data: {
+        service,
+        ts,
+        recvData,
+        msg
+      }
+    })
+  }
+  warning(
+    testerid: string,
+    service: ServiceItem,
+    sequence: Sequence,
+    seqIndex: number,
+    index: number,
+    ts: number,
+    recvData?: Buffer,
+    msg?: string
+  ) {
+    this.log.warn({
+      method: this.methodPrefix + 'udsWarning',
+      id: testerid,
+      data: {
+        service,
+        sequence,
+        index,
+        seqIndex,
+        ts,
+        recvData,
+        msg
+      }
+    })
+  }
+  addMethodPrefix(prefix: string) {
+    this.methodPrefix = prefix
+  }
+  scriptMsg(msg: string, ts: number, level: 'info' | 'warn' | 'error' = 'info') {
+    this.log[level]({
+      method: this.methodPrefix + 'udsScript',
+      data: {
+        msg,
+        ts
+      }
+    })
+  }
+  systemMsg(msg: string, ts: number, level: 'info' | 'warn' | 'error' = 'info') {
+    this.log[level]({
+      method: this.methodPrefix + 'udsSystem',
+      data: {
+        msg,
+        ts
+      }
+    })
+  }
+  error(testerid: string, msg: string, ts: number, recvData?: Buffer) {
+    this.log.error({
+      method: this.methodPrefix + 'udsError',
+      id: testerid,
+      data: {
+        msg,
+        ts,
+        recvData
+      }
+    })
+  }
+  udsIndex(
+    testerid: string,
+    index: number,
+    serviceName: string,
+    action: 'start' | 'finished' | 'progress',
+    percent?: number
+  ) {
+    const l = action == 'start' ? 'debug' : 'info'
+    this.log[l]({
+      method: this.methodPrefix + 'udsIndex',
+      id: testerid,
+      data: {
+        serviceName,
+        index,
+        action,
+        percent
+      }
+    })
+  }
+  close() {
+    this.log.close()
+  }
+  testInfo(id: string | undefined, event: TestEvent, msg?: string) {
+    this.log.info({
+      method: 'testInfo',
+      id,
+      data: event,
+      msg
+    })
+  }
+}
+
+export class DoipLOG {
+  vendor: string
+  log: Logger
+
+  deviceId: string
+
+  constructor(
+    vendor: string,
+    instance: string,
+    deviceId: string,
+    private event: EventEmitter,
+    private ts: number
+  ) {
+    this.vendor = vendor
+    this.deviceId = deviceId
+    const et1 = externalTransport.map((t) => t.t())
+    const dt1 = deviceTransport.map((t) => t.t())
+    this.log = createLogger({
+      transports: [new Base(), ...et1, ...dt1],
+      format: format.combine(
+        format.json(),
+        instanceFormat({ instance: instance }),
+        format.label({ label: `IP-${vendor}` }),
+        ...externalFormat
+      )
+    })
+    //check device id
+    const combinedLogs = this.log.transports.filter((transport) => {
+      return (transport as any).devices && (transport as any).devices.indexOf(this.deviceId) == -1
+    })
+    for (const log of combinedLogs) {
+      this.log.remove(log)
+    }
+  }
+  close() {
+    this.log.close()
+    this.event.removeAllListeners()
+  }
+  ipBase(
+    type: 'tcp' | 'udp',
+    dir: 'OUT' | 'IN',
+    local: { address?: string; port?: number },
+    remote: { address?: string; port?: number },
+    data: Buffer
+  ) {
+    const ts = getTsUs() - this.ts
+    if (data.length < 2) {
+      this.error(ts, `error data lenght, data: ${data.toString('hex')}`)
+      return ts
+    }
+
+    const payloadType = data.readUint16BE(2)
+    let name = ''
+    switch (payloadType) {
+      case PayloadType.DoIP_HeaderNegativeAcknowledge:
+        name = 'Generic DoIP header negative acknowledge'
+        break
+      case PayloadType.DoIP_VehicleIdentificationRequest:
+        name = 'Vehicle identification request message'
+        break
+      case PayloadType.DoIP_VehicleIdentificationRequestWithVIN:
+        name = 'Vehicle identification request message with VIN'
+        break
+      case PayloadType.DoIP_VehicleIdentificationRequestWithEID:
+        name = 'Vehicle identification request message with EID'
+        break
+      case PayloadType.DoIP_VehicleAnnouncementResponse:
+        name = 'Vehicle announcement message/vehicle identification response message'
+        break
+      case PayloadType.DoIP_RouteActivationRequest:
+        name = 'Routing activation request'
+        break
+      case PayloadType.DoIP_RouteActivationResponse:
+        name = 'Routing activation response'
+        break
+      case PayloadType.DoIP_AliveRequest:
+        name = 'Alive check request'
+        break
+      case PayloadType.DoIP_AliveResponse:
+        name = 'Alive check response'
+        break
+      case PayloadType.DoIP_EntityStateRequest:
+        name = 'DoIP entity status request'
+        break
+      case PayloadType.DoIP_EntityStateResponse:
+        name = 'DoIP entity status response'
+        break
+      case PayloadType.DoIP_PowerModeInfoRequest:
+        name = 'Diagnostic power mode information request'
+        break
+      case PayloadType.DoIP_PowerModeInfoResponse:
+        name = 'Diagnostic power mode information response'
+        break
+      case PayloadType.DoIP_DiagnosticMessage:
+        name = 'Diagnostic message'
+        break
+      case PayloadType.DoIP_DiagnosticMessagePositiveAcknowledge:
+        name = 'Diagnostic message positive acknowledgement'
+        break
+      case PayloadType.DoIP_DiagnosticMessageNegativeAcknowledge:
+        name = 'Diagnostic message negative acknowledgement'
+        break
+    }
+
+    const val = {
+      dir,
+      type,
+      local: `${local.address}:${local.port}`,
+      remote: `${remote.address}:${remote.port}`,
+      data,
+      ts: ts,
+      name: name
+    }
+
+    this.log.info({
+      method: 'ipBase',
+      deviceId: this.deviceId,
+      data: val
+    })
+    // this.event.emit('ip-frame', val)
+    return ts
+  }
+  error(ts: number, msg?: string) {
+    this.log.error({
+      method: 'ipError',
+      deviceId: this.deviceId,
+      data: {
+        ts: ts,
+        msg: msg
+      }
+    })
+  }
+}
+
+export class LinLOG {
+  vendor: string
+  log: Logger
+  deviceId: string
+
+  constructor(
+    vendor: string,
+    instance: string,
+    deviceId: string,
+    private event: EventEmitter
+  ) {
+    this.vendor = vendor
+    this.deviceId = deviceId
+    const et1 = externalTransport.map((t) => t.t())
+    const dt1 = deviceTransport.map((t) => t.t())
+    this.log = createLogger({
+      transports: [new Base(), ...et1, ...dt1],
+      format: format.combine(
+        format.json(),
+        instanceFormat({ instance: instance }),
+        format.label({ label: `Lin-${vendor}` }),
+        ...externalFormat
+      )
+    })
+
+    //check device id
+    const combinedLogs = this.log.transports.filter((transport) => {
+      return (transport as any).devices && (transport as any).devices.indexOf(this.deviceId) == -1
+    })
+    for (const log of combinedLogs) {
+      this.log.remove(log)
+    }
+  }
+  close() {
+    this.log.close()
+
+    this.event.removeAllListeners()
+  }
+  linBase(data: LinMsg) {
+    this.log.debug({
+      method: 'linBase',
+      data,
+      deviceId: this.deviceId
+    })
+    this.event.emit('lin-frame', data)
+  }
+  sendEvent(msg: string, ts: number) {
+    this.log.info({
+      method: 'linEvent',
+      data: {
+        msg,
+        ts
+      },
+      deviceId: this.deviceId
+    })
+  }
+  error(ts: number, msg?: string, data?: LinMsg) {
+    this.log.error({
+      method: 'linError',
+      data: {
+        ts,
+        msg,
+        data
+      },
+      deviceId: this.deviceId
+    })
+  }
+}
+
+export class SerialLOG {
+  vendor: string
+  log: Logger
+  deviceId: string
+
+  constructor(
+    vendor: string,
+    instance: string,
+    deviceId: string,
+    private event: EventEmitter
+  ) {
+    this.vendor = vendor
+    this.deviceId = deviceId
+    const et1 = externalTransport.map((t) => t.t())
+    const dt1 = deviceTransport.map((t) => t.t())
+    this.log = createLogger({
+      transports: [new Base(), ...et1, ...dt1],
+      format: format.combine(
+        format.json(),
+        instanceFormat({ instance: instance }),
+        format.label({ label: `Serial-${vendor}` }),
+        ...externalFormat
+      )
+    })
+
+    //check device id
+    const combinedLogs = this.log.transports.filter((transport) => {
+      return (transport as any).devices && (transport as any).devices.indexOf(this.deviceId) == -1
+    })
+    for (const log of combinedLogs) {
+      this.log.remove(log)
+    }
+  }
+  close() {
+    this.log.close()
+
+    this.event.removeAllListeners()
+  }
+  serialBase(data: SerialMessage) {
+    this.log.debug({
+      method: 'serialBase',
+      data,
+      deviceId: this.deviceId
+    })
+    this.event.emit('serial-frame', data)
+  }
+  error(ts: number, msg?: string) {
+    this.log.error({
+      method: 'serialError',
+      data: {
+        ts,
+        msg
+      },
+      deviceId: this.deviceId
+    })
+  }
+}
+
+export class VarLOG {
+  log: Logger
+  id?: string
+  constructor(id?: string) {
+    this.id = id
+
+    const et1 = externalTransport.map((t) => t.t())
+    this.log = createLogger({
+      transports: [new Base(), ...et1],
+      format: format.combine(format.json(), ...externalFormat)
+    })
+  }
+  setVarByKey(key: string, value: number | string | number[], ts: number) {
+    const { found, target } = setVarByKey(key, value)
+    if (found && target) {
+      this.log.info({
+        method: 'setVar',
+        data: [{ name: target.name, value, id: target.id, uuid: this.id }],
+        ts
+      })
+      globalThis.varEvent?.emit('update', {
+        name: target.name,
+        value,
+        id: target.id,
+        uuid: this.id
+      })
+    }
+  }
+  setVarByKeyBatch(data: { key: string; value: number | string | number[] }[], ts: number) {
+    const founds: { index: number; var: VarItem }[] = []
+    for (const [index, item] of data.entries()) {
+      const found = setVarByKey(item.key, item.value)
+      if (found) {
+        founds.push({
+          index,
+          var: found.target
+        })
+      }
+    }
+    if (founds.length > 0) {
+      this.log.info({
+        method: 'setVar',
+        data: founds.map((f) => ({
+          index: f.index,
+          name: f.var.name,
+          value: data[f.index].value,
+          id: f.var.id,
+          uuid: this.id
+        })),
+        ts
+      })
+      globalThis.varEvent?.emit(
+        'update',
+        founds.map((f) => ({
+          name: f.var.name,
+          value: data[f.index].value,
+          id: f.var.id,
+          uuid: this.id
+        }))
+      )
+    }
+  }
+  setVar(name: string, value: number | string | number[], ts: number) {
+    const { found, target } = setVarMain(name, value)
+    if (found && target) {
+      this.log.info({
+        method: 'setVar',
+        data: [{ name: target.name, value, id: target.id, uuid: this.id }],
+        ts
+      })
+      globalThis.varEvent?.emit('update', {
+        name: target.name,
+        value,
+        id: target.id,
+        uuid: this.id
+      })
+    }
+  }
+  getVar(name: string): number | string | number[] {
+    return getVarMain(name)
+  }
+  close() {
+    this.log.close()
+  }
+}
+
+export class SomeipLOG {
+  vendor: string
+  log: Logger
+
+  deviceId: string
+
+  constructor(
+    vendor: string,
+    instance: string,
+    deviceId: string,
+    private event: EventEmitter,
+    private applicationId?: number
+  ) {
+    this.vendor = vendor
+    this.deviceId = deviceId
+    const et1 = externalTransport.map((t) => t.t())
+    const dt1 = deviceTransport.map((t) => t.t())
+    this.log = createLogger({
+      transports: [new Base(), ...et1, ...dt1],
+      format: format.combine(
+        format.json(),
+        instanceFormat({ instance: instance }),
+        format.label({ label: `${vendor}` }),
+        ...externalFormat
+      )
+    })
+    //check device id
+    const combinedLogs = this.log.transports.filter((transport) => {
+      return (transport as any).devices && (transport as any).devices.indexOf(this.deviceId) == -1
+    })
+    for (const log of combinedLogs) {
+      this.log.remove(log)
+    }
+  }
+  close() {
+    this.log.close()
+
+    this.event.removeAllListeners()
+  }
+
+  someipBase(header: Buffer, data: Buffer, ts: number) {
+    try {
+      this.log.info({
+        method: 'someipBase',
+        deviceId: this.deviceId,
+        data: {
+          header,
+          data,
+          ts
+        }
+      })
+    } catch (e: any) {
+      this.log.error({
+        method: 'someipError',
+        deviceId: this.deviceId,
+        data: {
+          ts: ts,
+          error: e.toString()
+        }
+      })
+    }
+  }
+  someipMessage(message: SomeipMessage, sending: boolean, ts: number) {
+    const resolvedSending =
+      typeof (message as any).sending === 'boolean' ? (message as any).sending : sending === true
+    // if (
+    //   this.applicationId !== undefined &&
+    //   Number.isFinite(this.applicationId) &&
+    //   !resolvedSending &&
+    //   (message.client & 0xffff) === (this.applicationId & 0xffff)
+    // ) {
+    //   return
+    // }
+    message.ts = ts
+    message.sending = resolvedSending
+    message.payload = Buffer.from(message.payload)
+
+    this.event.emit('someip-frame', message)
+    setTimeout(() => {
+      this.log.info({
+        method: 'someipBase',
+        deviceId: this.deviceId,
+        data: message
+      })
+    }, 0)
+  }
+  someipServiceValid(info: VsomeipAvailabilityInfo, ts: number) {
+    this.log.info({
+      method: 'someipServiceValid',
+      deviceId: this.deviceId,
+      data: {
+        info,
+        ts: ts
+      }
+    })
+  }
+  error(ts: number, msg?: string) {
+    this.log.error({
+      method: 'someipError',
+      deviceId: this.deviceId,
+      data: {
+        ts: ts,
+        error: msg
+      }
+    })
+  }
+}
+
+export class OsTraceLOG {
+  vendor: string
+  log: Logger
+  closeFlag = false
+
+  constructor(vendor: string, writerToFile?: string) {
+    this.vendor = vendor
+
+    const et1 = externalTransport.map((t) => t.t())
+    this.log = createLogger({
+      transports: [new Base(), ...et1],
+      format: format.combine(
+        format.json(),
+
+        format.label({ label: `${vendor}` }),
+        ...externalFormat
+      )
+    })
+
+    if (writerToFile) {
+      const csvLine = format((info: any, opts: any) => {
+        const d = info.data || {}
+        const method = info.message.method
+        if (method === 'osEvent') {
+          const d = (info.message.data as OsEvent) || {}
+          info[Symbol.for('message')] = `${d.ts},${d.type},${d.id},${d.status},${d.coreId}`
+          return info
+        }
+        return false
+      })
+
+      // 获取当前时间作为时间戳后缀 (格式: YYYYMMDDHHmmss)
+      const timestamp = dayjs().format('YYYYMMDDHHmmss')
+
+      const parsedPath = path.parse(writerToFile)
+      const fileWithSuffix = path.format({
+        dir: parsedPath.dir,
+        name: parsedPath.name + '_' + timestamp,
+        ext: parsedPath.ext
+      })
+
+      const fileTransport = new transports.File({
+        filename: fileWithSuffix,
+        level: 'info',
+        options: {
+          options: { flags: 'w' }
+        },
+        format: format.combine(csvLine())
+      })
+      this.log.add(fileTransport)
+    }
+  }
+  close() {
+    this.closeFlag = true
+    this.log.close()
+  }
+  osEvent(ts: number, event: OsEvent) {
+    if (this.closeFlag) {
+      return
+    }
+    this.log.info({
+      method: 'osEvent',
+      data: event,
+      ts: ts
+    })
+  }
+
+  error(ts: number, msg?: string) {
+    if (this.closeFlag) {
+      return
+    }
+    this.log.error({
+      method: 'osError',
+
+      error: msg,
+      ts: ts
+    })
+  }
+}
+
+export class PluginLOG {
+  log: Logger
+
+  constructor(public pluginId: string) {
+    const et1 = externalTransport.map((t) => t.t())
+    this.log = createLogger({
+      transports: [new Base(), ...et1],
+      format: format.combine(format.json(), ...externalFormat)
+    })
+  }
+
+  pluginEvent(event: string, data: any) {
+    this.log.info({
+      method: 'pluginEvent',
+      id: this.pluginId,
+      event: event,
+      data: data
+    })
+  }
+
+  error(msg: string, data?: any) {
+    this.log.error({
+      method: 'pluginError',
+      id: this.pluginId,
+      msg: msg,
+      data: data
+    })
+  }
+
+  close(): void {
+    this.log.close()
+  }
+}
+
+export class ReplayLOG {
+  log: Logger
+  closeFlag = false
+  replayId: string
+
+  constructor(replayId: string, instance?: string) {
+    this.replayId = replayId
+    const et1 = externalTransport.map((t) => t.t())
+    const formatList = [format.json(), format.label({ label: 'Replay' })]
+    if (instance) {
+      formatList.push(instanceFormat({ instance: instance }))
+    }
+    this.log = createLogger({
+      transports: [new Base(), ...et1],
+      format: format.combine(...formatList, ...externalFormat)
+    })
+  }
+
+  close() {
+    this.closeFlag = true
+    this.log.close()
+  }
+
+  start(filePath: string, fileFormat: string) {
+    if (this.closeFlag) return
+    this.log.info({
+      method: 'replayStart',
+      replayId: this.replayId,
+      data: { filePath, format: fileFormat }
+    })
+  }
+
+  stop(reason?: string) {
+    if (this.closeFlag) return
+    this.log.info({
+      method: 'replayStop',
+      replayId: this.replayId,
+      data: { reason }
+    })
+  }
+
+  pause() {
+    if (this.closeFlag) return
+    this.log.info({
+      method: 'replayPause',
+      replayId: this.replayId,
+      data: {}
+    })
+  }
+
+  resume() {
+    if (this.closeFlag) return
+    this.log.info({
+      method: 'replayResume',
+      replayId: this.replayId,
+      data: {}
+    })
+  }
+
+  progress(current: number, total: number, percent: number, repeat: number) {
+    if (this.closeFlag) return
+    this.log.info({
+      method: 'replayProgress',
+      replayId: this.replayId,
+      data: { current, total, percent, repeat }
+    })
+  }
+
+  error(msg: string) {
+    if (this.closeFlag) return
+    this.log.error({
+      method: 'replayError',
+      replayId: this.replayId,
+      data: { msg }
+    })
+  }
+}

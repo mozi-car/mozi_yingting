@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "yingting",
+  "mainBinaryName": "yingting",
+  "version": "0.1.0",
+  "identifier": "com.mozi.yingting",
+  "build": {
+    "beforeDevCommand": "npm run build:sidecar && vite",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build:sidecar && npm run build:renderer",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "yingting",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 700
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb"],
+    "category": "DeveloperTool",
+    "shortDescription": "婴听 - 汽车ECU开发工具",
+    "longDescription": "yingting (YingTing) - 汽车ECU开发工具，基于 Tauri 2 + Rust + Node sidecar",
+    "icon": ["icons/icon.png"],
+    "resources": {
+      "../resources": "resources",
+      "../out/sidecar": "sidecar",
+      "../bin/node-linux-x64": "bin/node"
+    }
+  }
+}

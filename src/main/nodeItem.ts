@@ -1,0 +1,1612 @@
+import path from 'path'
+import fs from 'fs'
+import { CanAddr, CanMessage, formatError, getTsUs, swapAddr } from './share/can'
+import { TesterInfo } from './share/tester'
+import UdsTester, {
+  linApiBaudRateCtrl,
+  linApiPowerCtrl,
+  linApiStartSch,
+  linApiStopSch,
+  pwmApiSetDuty,
+  SerialApi,
+  SomeipApiCall
+} from './workerClient'
+import { CAN_TP, CAN_TP_SOCKET, TpError as CanTpError } from './docan/cantp'
+import { UdsLOG, VarLOG } from './log'
+import { applyBuffer, getRxPdu, getTxPdu, PwmBaseInfo, ServiceItem, UdsDevice } from './share/uds'
+import { findService, UDSTesterMain } from './docan/uds'
+import { cloneDeep } from 'lodash'
+
+import { NodeItem } from 'src/preload/data'
+import LinBase from './dolin/base'
+import { EthAddr, EthBaseInfo, VinInfo, TlsConfig } from './share/doip'
+import { LIN_TP, TpError as LinTpError } from './dolin/lintp'
+import { LinDirection, LinMode, LinMsg } from './share/lin'
+
+import { DOIP, DoipError } from './doip'
+import { CanBase } from './docan/base'
+import Transport from 'winston-transport'
+import logo from './logo.html?raw'
+import fsP from 'fs/promises'
+import type { TestEvent } from 'node:test/reporters'
+import { PwmBase } from './pwm'
+import { SerialBase } from './serial'
+import { SerialMessage } from './share/serial'
+import { setSignal } from './util'
+import { VSomeIP_Client } from './vsomeip'
+import { SomeipMessage, SomeipMessageType, VsomeipAvailabilityInfo } from './share/someip'
+type TestTree = {
+  label: string
+  type: 'test' | 'config' | 'log'
+  children: TestTree[]
+
+  time?: string
+  status?: 'pass' | 'fail' | 'skip' | 'running'
+  msg?: string
+  nesting?: number
+  parent?: TestTree
+}
+
+type TestLog = {
+  message: {
+    method: string
+    data: any
+  }
+  level: string
+  label: string
+}
+
+class TestTransport extends Transport {
+  constructor(
+    private cb: (info: any) => void,
+    opts?: Transport.TransportStreamOptions
+  ) {
+    super(opts)
+    //
+    // Consume any custom options here. e.g.:
+    // - Connection information for databases
+    // - Authentication information for APIs (e.g. loggly, papertrail,
+    //   logentries, etc.).
+    //
+  }
+
+  log(info: any, callback: () => void) {
+    this.cb(info)
+
+    // Perform the writing to the remote service
+    callback()
+  }
+}
+export class NodeClass {
+  pool?: UdsTester
+  private cantp: CAN_TP[] = []
+  private lintp: LIN_TP[] = []
+  private cantpSocketMap: Map<string, { tp: CAN_TP; socket: CAN_TP_SOCKET }> = new Map()
+  private linBaseId: string[] = []
+  private canBaseId: string[] = []
+  private ethBaseId: string[] = []
+  private pwmBaseId: string[] = []
+  private serialBaseId: string[] = []
+  private someipBaseId: string[] = []
+  private startTs = 0
+  private boundCb: (frame: CanMessage | LinMsg | SomeipMessage | SerialMessage) => void
+  private boundSomeipServiceValidCb: (info: VsomeipAvailabilityInfo) => void
+  private udsTesterMap = new Map<string, UDSTesterMain>()
+  private canBaseMap: Map<string, CanBase> = new Map()
+  private linBaseMap: Map<string, LinBase> = new Map()
+  private doips: DOIP[] = []
+  private ethBaseMap: Map<string, EthBaseInfo> = new Map()
+  private pwmBaseMap: Map<string, PwmBase> = new Map()
+  private serialBaseMap: Map<string, SerialBase> = new Map()
+  private someipMap: Map<string, VSomeIP_Client> = new Map()
+  private testers: Record<string, TesterInfo> = {}
+  freeEvent: {
+    doip: DOIP
+    id: string
+    cb: (data: { data: Buffer; ts: number } | DoipError) => void
+  }[] = []
+  log?: UdsLOG
+  varLog: VarLOG
+  logs: TestLog[] = []
+  constructor(
+    public nodeItem: NodeItem,
+    private projectPath: string,
+    private projectName: string,
+    private testOptions?:
+      | {
+          testOnly?: boolean
+          id?: string
+        }
+      | undefined
+  ) {
+    this.varLog = new VarLOG(nodeItem.id)
+    this.boundCb = this.cb.bind(this)
+    this.boundSomeipServiceValidCb = this.someipServiceValidCb.bind(this)
+    this.startTs = getTsUs()
+    if (nodeItem.script) {
+      let jsPath = nodeItem.script
+      const info = path.parse(jsPath)
+      if (info.ext == '.ts') {
+        const outDir = path.join(this.projectPath, '.ScriptBuild')
+        jsPath = path.join(outDir, info.name + '.js')
+      } else {
+        if (!path.isAbsolute(jsPath)) {
+          jsPath = path.join(this.projectPath, jsPath)
+        }
+      }
+
+      this.log = new UdsLOG(`${nodeItem.name} ${path.basename(nodeItem.script)}`)
+      if (this.testOptions) {
+        this.log.addMethodPrefix('test-')
+
+        const testTransport = new TestTransport((info: any) => {
+          const method = info.message.method
+          if (
+            method == 'test-udsSystem' ||
+            method == 'test-udsScript' ||
+            method == 'test-udsWarning' ||
+            method == 'testInfo'
+          ) {
+            this.logs.push(info)
+          }
+        })
+        this.log.addTransport(testTransport)
+      }
+      this.pool = new UdsTester(
+        nodeItem.id,
+        {
+          PROJECT_ROOT: this.projectPath,
+          PROJECT_NAME: this.projectName,
+          MODE: this.testOptions ? 'test' : 'node',
+          NAME: nodeItem.name
+        },
+        jsPath,
+        this.log,
+        this.testers,
+        this.testOptions
+      )
+      if (this.testOptions) {
+        this.log?.systemMsg(
+          `----- Test Config ${this.nodeItem.name} starting -----`,
+          getTsUs(),
+          'info'
+        )
+      }
+    }
+  }
+  init(
+    nodeItem: NodeItem,
+    canBaseMap: Map<string, CanBase>,
+    linBaseMap: Map<string, LinBase>,
+    doips: DOIP[],
+    ethBaseMap: Map<string, EthBaseInfo>,
+    pwmBaseMap: Map<string, PwmBase>,
+    someipMap: Map<string, VSomeIP_Client>,
+    serialBaseMap: Map<string, SerialBase>,
+    testers: Record<string, TesterInfo>
+  ) {
+    this.canBaseMap = canBaseMap
+    this.linBaseMap = linBaseMap
+    this.doips = doips
+    this.ethBaseMap = ethBaseMap
+    this.pwmBaseMap = pwmBaseMap
+    this.serialBaseMap = serialBaseMap
+    this.someipMap = someipMap
+    this.testers = testers
+    this.pool?.buildServiceMap(testers)
+    for (const c of nodeItem.channel) {
+      const baseItem = this.canBaseMap.get(c)
+      if (baseItem) {
+        this.canBaseId.push(c)
+        baseItem.attachCanMessage(this.boundCb)
+        continue
+      }
+      const linBaseItem = this.linBaseMap.get(c)
+      if (linBaseItem) {
+        linBaseItem.attachLinMessage(this.boundCb)
+        this.linBaseId.push(c)
+        if (nodeItem.workNode) {
+          const db = linBaseItem.setupEntry(nodeItem.workNode)
+          if (db) {
+            linBaseItem.registerNode(db, nodeItem.workNode)
+          }
+        }
+        continue
+      }
+      const ethBaseItem = this.ethBaseMap.get(c)
+      if (ethBaseItem) {
+        this.ethBaseId.push(c)
+      }
+      const pwmBaseItem = this.pwmBaseMap.get(c)
+      if (pwmBaseItem) {
+        this.pwmBaseId.push(c)
+      }
+      const serialBaseItem = this.serialBaseMap.get(c)
+      if (serialBaseItem) {
+        this.serialBaseId.push(c)
+        serialBaseItem.attachSerialMessage(this.boundCb)
+      }
+      const someipBaseItem = this.someipMap.get(c)
+      if (someipBaseItem) {
+        this.someipBaseId.push(c)
+        someipBaseItem.attachSomeipMessage(this.boundCb)
+        someipBaseItem.attachSomeipServiceValid(this.boundSomeipServiceValidCb)
+      }
+    }
+    if (this.pool) {
+      this.pool.registerHandler('output', this.sendFrame.bind(this))
+      this.pool.registerHandler('sendDiag', this.sendDiag.bind(this))
+      this.pool.registerHandler('setSignal', setSignal)
+      this.pool.registerHandler('varApi', this.varApi.bind(this))
+      this.pool.registerHandler('runUdsSeq', this.runUdsSeq.bind(this))
+      this.pool.registerHandler('linApi', this.linApi.bind(this))
+      this.pool.registerHandler('canApi', this.canApi.bind(this))
+      this.pool.registerHandler('stopUdsSeq', this.stopUdsSeq.bind(this))
+      this.pool.registerHandler('pwmApi', this.pwmApi.bind(this))
+      this.pool.registerHandler('serialApi', this.serialApi.bind(this))
+      this.pool.registerHandler('someipApi', this.someipApi.bind(this))
+
+      //cantp
+      for (const tester of Object.values(this.testers)) {
+        if (tester.address.length > 0) {
+          for (const c of nodeItem.channel) {
+            const canBaseItem = this.canBaseMap.get(c)
+            if (canBaseItem && tester.type == 'can') {
+              const tp = new CAN_TP(canBaseItem, nodeItem.id)
+              for (const [index, addr] of tester.address.entries()) {
+                if (addr.type == 'can' && addr.canAddr) {
+                  const idT = tp.getReadId(addr.canAddr, tester.simulateBy != nodeItem.id)
+                  tp.event.on(idT, (data) => {
+                    if (data instanceof CanTpError) {
+                      //TODO:
+                    } else {
+                      if (data.addr.uuid != this.nodeItem.id) {
+                        const item = cloneDeep(findService(tester, data.data, true))
+                        if (item) {
+                          try {
+                            applyBuffer(item, data.data, true)
+                            this.pool?.triggerSend(tester.name, item, addr, data.ts).catch((e) => {
+                              this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                            })
+                          } catch (e: any) {
+                            this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                          }
+                        }
+                      }
+                    }
+                  })
+                  if (index == 0) {
+                    const idR = tp.getReadId(
+                      swapAddr(addr.canAddr),
+                      tester.simulateBy != nodeItem.id
+                    )
+                    tp.event.on(idR, (data) => {
+                      if (data instanceof CanTpError) {
+                        //TODO:
+                      } else {
+                        if (data.addr.uuid != this.nodeItem.id) {
+                          const item = cloneDeep(findService(tester, data.data, false))
+                          if (item) {
+                            try {
+                              applyBuffer(item, data.data, false)
+                              this.pool?.triggerRecv(tester.name, item, data.ts).catch((e) => {
+                                this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                              })
+                            } catch (e: any) {
+                              this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                            }
+                          }
+                        }
+                      }
+                    })
+                  }
+                }
+              }
+              this.cantp.push(tp)
+            }
+            const linBaseItem = this.linBaseMap.get(c)
+            if (linBaseItem && tester.type == 'lin') {
+              const tp = new LIN_TP(linBaseItem, tester.simulateBy != nodeItem.id)
+              for (const addr of tester.address) {
+                if (addr.type == 'lin' && addr.linAddr) {
+                  const idT = tp.getReadId(LinMode.MASTER, addr.linAddr)
+                  tp.event.on(idT, (data) => {
+                    if (data instanceof LinTpError) {
+                      //TODO:
+                    } else {
+                      if (data.addr.uuid != this.nodeItem.id) {
+                        const item = cloneDeep(findService(tester, data.data, true))
+                        if (item) {
+                          try {
+                            applyBuffer(item, data.data, true)
+                            this.pool?.triggerSend(tester.name, item, addr, data.ts).catch((e) => {
+                              this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                            })
+                          } catch (e: any) {
+                            this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                          }
+                        }
+                      }
+                    }
+                  })
+                  const idR = tp.getReadId(LinMode.SLAVE, addr.linAddr)
+                  tp.event.on(idR, (data) => {
+                    if (data instanceof LinTpError) {
+                      //TODO:
+                    } else {
+                      if (data.addr.uuid != this.nodeItem.id) {
+                        const item = cloneDeep(findService(tester, data.data, false))
+                        if (item) {
+                          try {
+                            applyBuffer(item, data.data, false)
+                            this.pool?.triggerRecv(tester.name, item, data.ts, addr).catch((e) => {
+                              this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                            })
+                          } catch (e: any) {
+                            this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                          }
+                        }
+                      }
+                    }
+                  })
+                }
+              }
+              this.lintp.push(tp)
+            }
+            const ethBaseItem = this.ethBaseMap.get(c)
+            if (ethBaseItem && tester.type == 'eth') {
+              const baseItem = this.doips.find((d) => d.base.id == ethBaseItem.id)
+              if (baseItem) {
+                if (tester.simulateBy == nodeItem.id) {
+                  // Get server TLS config from tester level, resolve relative paths
+                  const serverTlsConfig = this.resolveTlsPaths(tester.serverTls)
+                  baseItem.registerEntity(true, this.log, serverTlsConfig)
+                }
+                for (const addr of tester.address) {
+                  if (addr.type == 'eth' && addr.ethAddr) {
+                    const idT = baseItem.getId(addr.ethAddr, 'client')
+
+                    const cbT = (data: { data: Buffer; ts: number } | DoipError) => {
+                      if (data instanceof DoipError) {
+                        //TODO:
+                      } else {
+                        const item = cloneDeep(findService(tester, data.data, true))
+                        if (item) {
+                          try {
+                            applyBuffer(item, data.data, true)
+                            this.pool?.triggerSend(tester.name, item, addr, data.ts).catch((e) => {
+                              this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                            })
+                          } catch (e: any) {
+                            this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                          }
+                        }
+                      }
+                    }
+                    baseItem.event.on(idT, cbT)
+                    this.freeEvent.push({ doip: baseItem, id: idT, cb: cbT })
+
+                    const idR = baseItem.getId(addr.ethAddr, 'server')
+                    const cbR = (data: { data: Buffer; ts: number } | DoipError) => {
+                      if (data instanceof DoipError) {
+                        //TODO:
+                      } else {
+                        const item = cloneDeep(findService(tester, data.data, false))
+                        if (item) {
+                          try {
+                            applyBuffer(item, data.data, false)
+                            this.pool?.triggerRecv(tester.name, item, data.ts, addr).catch((e) => {
+                              this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                            })
+                          } catch (e: any) {
+                            this.log?.scriptMsg(e.toString(), data.ts, 'error')
+                          }
+                        }
+                      }
+                    }
+                    baseItem.event.on(idR, cbR)
+                    this.freeEvent.push({ doip: baseItem, id: idR, cb: cbR })
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  /**
+   * Resolve relative TLS certificate paths to absolute paths based on project path
+   */
+  private resolveTlsPaths(tlsConfig?: TlsConfig): TlsConfig | undefined {
+    if (!tlsConfig) return undefined
+
+    const resolved: TlsConfig = { ...tlsConfig }
+
+    // Resolve relative paths to absolute paths
+    if (resolved.ca && !path.isAbsolute(resolved.ca)) {
+      resolved.ca = path.join(this.projectPath, resolved.ca)
+    }
+    if (resolved.cert && !path.isAbsolute(resolved.cert)) {
+      resolved.cert = path.join(this.projectPath, resolved.cert)
+    }
+    if (resolved.key && !path.isAbsolute(resolved.key)) {
+      resolved.key = path.join(this.projectPath, resolved.key)
+    }
+
+    return resolved
+  }
+  private async _generateHtml(data: TestTree) {
+    const statusIcons = {
+      pass: '✅',
+      fail: '❌',
+      skip: '⏭️',
+      todo: '📝',
+      running: '🔄'
+    }
+
+    const statusColors = {
+      pass: '#67C23A',
+      fail: '#F56C6C',
+      skip: '#909399',
+      todo: '#E6A23C',
+      running: '#409EFF'
+    }
+
+    function generateTestCaseHtml(node: TestTree): string {
+      if (node.type === 'log') {
+        // Calculate proper indentation for log entries
+        // If the log has a parent, use parent's nesting + 1, otherwise use node's nesting or default to 0
+        const nestingLevel = node.parent ? (node.parent.nesting || 0) + 1 : node.nesting || 0
+
+        return `
+          <div class="log-entry" style="margin-left: ${nestingLevel * 20}px">
+            ${`<div class="log-message">${node.msg}</div>`}
+          </div>
+        `
+      }
+
+      const status = node.status || 'unknown'
+      const icon = statusIcons[status as keyof typeof statusIcons] || '❓'
+      const color = statusColors[status as keyof typeof statusColors] || '#909399'
+      const time = node.time ? `(${node.time}s)` : ''
+
+      let html = `
+              <div class="test-case" style="margin-left: ${(node.nesting || 0) * 20}px">
+                  <div class="test-header" style="color: ${color}">
+                      <span class="icon">${icon}</span>
+                      <span class="name">${node.label}</span>
+                      <span class="time">${time}</span>
+                  </div>
+              </div>
+          `
+
+      if (node.children && node.children.length > 0) {
+        html += `<div class="children">
+                  ${node.children.map((child) => generateTestCaseHtml(child)).join('')}
+              </div>`
+      }
+
+      return html
+    }
+
+    const timestamp = new Date().toLocaleString()
+    const testConfig = this.nodeItem
+    const scriptPath = testConfig?.script || 'No script specified'
+
+    const html = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <meta charset="UTF-8">
+              <title>ECUBus-Pro - Test Report</title>
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                      max-width: 1200px;
+                      margin: 0 auto;
+                      padding: 20px;
+                      background: #f5f7fa;
+                  }
+                  .container {
+                      background: white;
+                      border-radius: 8px;
+                      box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+                      padding: 20px;
+                  }
+                  .report-header {
+                      display: flex;
+                      align-items: center;
+                      gap: 20px;
+                      margin-bottom: 20px;
+                      padding-bottom: 20px;
+                      border-bottom: 1px solid #ebeef5;
+                  }
+                  .logo-container {
+                      display: flex;
+                      align-items: center;
+                  }
+                  .logo {
+                      width: 64px;
+                      height: 64px;
+                      margin-right: 16px;
+                  }
+                  .software-info {
+                      flex: 1;
+                      padding-top: 0;
+                  }
+                  .software-name {
+                      font-size: 24px;
+                      color: #303133;
+                      margin: 0;
+                  }
+                  .report-title {
+                      font-size: 18px;
+                      color: #606266;
+                      margin: 4px 0;
+                  }
+                  .script-info {
+                      color: #606266;
+                      font-size: 14px;
+                      margin-top: 4px;
+                  }
+                  .timestamp {
+                      color: #909399;
+                      font-size: 14px;
+                  }
+                  .test-case {
+                      margin: 8px 0;
+                  }
+                  .test-header {
+                      display: flex;
+                      align-items: center;
+                      font-size: 14px;
+                      padding: 8px;
+                      border-radius: 4px;
+                      background: #f8f9fb;
+                  }
+                  .log-entry {
+                      margin: 6px 0;
+                  }
+                  .log-message {
+                      padding: 8px 12px;
+                      background: #f8f8f8;
+                      border-left: 3px solid #409EFF;
+                      border-radius: 4px;
+                      color: #606266;
+                      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      
+                      white-space: pre-wrap;
+                      overflow-wrap: break-word;
+                      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                  }
+                  .log-label {
+                      font-weight: 600;
+                      color: #409EFF;
+                  }
+                  .log-label-only {
+                      font-weight: 600;
+                      color: #409EFF;
+                  }
+                  .icon {
+                      margin-right: 8px;
+                  }
+                  .name {
+                      flex: 1;
+                  }
+                  .time {
+                      color: #909399;
+                      font-size: 12px;
+                      margin-left: 8px;
+                  }
+                  .children {
+                      margin-left: 20px;
+                  }
+                  .footer {
+                      margin-top: 40px;
+                      padding-top: 20px;
+                      border-top: 1px solid #ebeef5;
+                      color: #909399;
+                      font-size: 14px;
+                      text-align: center;
+                  }
+                  
+                  .footer a {
+                      color: var(--el-color-primary);
+                      text-decoration: none;
+                  }
+                  
+                  .footer a:hover {
+                      text-decoration: underline;
+                  }
+                  
+                  .footer-links {
+                      display: flex;
+                      justify-content: center;
+                      gap: 20px;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <div class="report-header">
+                      <div class="logo-container">
+                          <img src="data:image/png;base64,${logo}" class="logo" alt="ECUBus Pro Logo">
+                          <div class="software-info">
+                              <h1 class="software-name">ECUBus-Pro</h1>
+                              <div class="report-title">Test Report - ${data.label}</div>
+                              <div class="script-info">Script: ${scriptPath}</div>
+                              <div class="timestamp">Generated at: ${timestamp}</div>
+                          </div>
+                      </div>
+                  </div>
+                  <div class="test-cases">
+                      ${data.children?.map((child) => generateTestCaseHtml(child)).join('') || ''}
+                  </div>
+                  
+                  <div class="footer">
+                      <div class="footer-links">
+                          <a href="https://app.whyengineer.com/" target="_blank">Project Homepage</a>
+                          <a href="https://github.com/ecubus/EcuBus-Pro" target="_blank">GitHub Repository</a>
+                      </div>
+                  </div>
+              </div>
+          </body>
+          </html>
+      `
+    return html
+  }
+
+  async generateHtml(reportPath?: string, returnHtml = false) {
+    const root: TestTree = {
+      label: this.nodeItem.name,
+      type: 'config',
+      children: []
+    }
+
+    function buildSubTree(infos: TestLog[]) {
+      let currentSuite: TestTree | undefined
+      const roots: TestTree[] = []
+      const testMap = new Map<string, TestTree>()
+      function startTest(event: any) {
+        const originalSuite = currentSuite
+        const testId = `${event.name}:${event.line || 0}:${event.column || 0}`
+
+        currentSuite = {
+          type: 'test',
+
+          label: event.name,
+          nesting: event.nesting,
+          parent: currentSuite,
+          children: []
+        }
+        testMap.set(testId, currentSuite)
+        if (originalSuite?.children) {
+          originalSuite.children.push(currentSuite)
+        }
+        if (!currentSuite.parent) {
+          roots.push(currentSuite)
+        }
+      }
+      for (const info of infos) {
+        if (info.message.method == 'testInfo') {
+          const event = info.message.data as TestEvent
+          if ((event.data as any).name == '____ecubus_pro_test___') {
+            continue
+          }
+          if (event.data)
+            switch (event.type) {
+              case 'test:dequeue': {
+                startTest(event.data)
+                break
+              }
+              case 'test:pass':
+              case 'test:fail': {
+                if (!currentSuite) {
+                  startTest({ name: 'root', nesting: 0, line: 0, column: 0 })
+                }
+                if (
+                  currentSuite!.label !== event.data.name ||
+                  currentSuite!.nesting !== event.data.nesting
+                ) {
+                  startTest(event.data)
+                }
+
+                if (currentSuite?.nesting === event.data.nesting) {
+                  currentSuite = currentSuite.parent
+                }
+                if (currentSuite) {
+                  if (event.type == 'test:pass') {
+                    if (event.data.skip) {
+                      currentSuite.status = 'skip'
+                    } else {
+                      currentSuite.status = 'pass'
+                    }
+                  } else if (event.type == 'test:fail') {
+                    currentSuite.status = 'fail'
+                  }
+                }
+                // if (nonCommentChildren.length > 0) {
+
+                // } else {
+
+                // }
+                break
+              }
+              case 'test:diagnostic': {
+                if (currentSuite) {
+                  currentSuite.children.push({
+                    type: 'log',
+                    label: 'Test Diagnostic',
+                    msg: event.data.message,
+                    nesting: event.data.nesting + 2,
+
+                    children: []
+                  })
+                }
+              }
+            }
+        } else {
+          const val: TestTree = {
+            label: info.label,
+            type: 'log',
+
+            children: [],
+            parent: currentSuite,
+            msg: info.message.data.msg
+          }
+          if (currentSuite) {
+            val.nesting = (currentSuite.nesting || 0) + 1
+            currentSuite.children.push(val)
+          } else {
+            root.children.push(val)
+          }
+        }
+      }
+      return {
+        roots,
+        testMap
+      }
+    }
+    const { roots, testMap } = buildSubTree(this.logs)
+    //update status
+    for (const log of this.logs) {
+      if (log.message.method == 'testInfo') {
+        const event = log.message.data as TestEvent
+
+        if (event.type == 'test:pass' || event.type == 'test:fail') {
+          const testId = `${event.data.name}:${event.data.line || 0}:${event.data.column || 0}`
+          const test = testMap.get(testId)
+          if (test) {
+            if (event.type == 'test:pass') {
+              test.status = 'pass'
+            } else if (event.type == 'test:fail') {
+              test.status = 'fail'
+            }
+            test.time = Number(event.data.details.duration_ms / 1000).toFixed(3)
+          }
+        }
+      }
+    }
+    root.children = roots
+    const html = await this._generateHtml(root)
+    if (returnHtml) {
+      return html
+    }
+    let fpath = path.join(this.projectPath, `${this.nodeItem.name}.html`)
+    if (reportPath) {
+      fpath = path.join(reportPath, `${this.nodeItem.name}.html`)
+      if (path.isAbsolute(fpath)) {
+        const dir = path.dirname(fpath)
+        if (fs.existsSync(dir)) {
+          await fsP.writeFile(fpath, html)
+          return fpath
+        } else {
+          throw new Error(`report directory ${dir} not found`)
+        }
+      } else {
+        fpath = path.join(this.projectPath, fpath)
+        const dir = path.dirname(fpath)
+        if (!fs.existsSync(dir)) {
+          await fsP.mkdir(dir, { recursive: true })
+        }
+        await fsP.writeFile(fpath, html)
+        return fpath
+      }
+    } else {
+      await fsP.writeFile(fpath, html)
+      return fpath
+    }
+  }
+  async getTestInfo() {
+    const info = await this.pool?.getTestInfo()
+    if (this.testOptions) {
+      this.log?.systemMsg(
+        `----- Test Config ${this.nodeItem.name} finished, total time: ${((getTsUs() - this.startTs) / 1000).toFixed(2)}ms -----`,
+        getTsUs(),
+        'info'
+      )
+    }
+    return info
+  }
+  varApi(
+    data:
+      | { method: 'setVar'; name: string; value: number | string | number[] }
+      | { method: 'setVars'; vars: Array<{ name: string; value: number | string | number[] }> }
+  ) {
+    const ts = getTsUs() - this.startTs
+
+    if (data.method == 'setVar') {
+      this.varLog.setVar(data.name, data.value, ts)
+    } else if (data.method == 'setVars') {
+      for (const item of data.vars) {
+        this.varLog.setVar(item.name, item.value, ts)
+      }
+    } else {
+      throw new Error(`invalid method ${data['method']}`)
+    }
+    return
+  }
+
+  async pwmApi(data: pwmApiSetDuty) {
+    const findPwmBase = (name?: string) => {
+      let ret: PwmBase | undefined
+      if (name != undefined) {
+        for (const channelId of this.pwmBaseId) {
+          const item = this.pwmBaseMap.get(channelId)
+          if (item && item.info.name == name) {
+            ret = item
+            break
+          }
+        }
+      } else {
+        // 返回第一个当前节点channel对应的pwmBase
+        if (this.pwmBaseId.length > 0) {
+          ret = this.pwmBaseMap.get(this.pwmBaseId[0])
+        }
+      }
+      if (ret == undefined) {
+        throw new Error(`device ${name} not found`)
+      }
+      return ret
+    }
+    const pwmBase = findPwmBase(data.device)
+    if (data.method == 'setDuty') {
+      pwmBase.setDutyCycle(data.duty)
+    }
+  }
+
+  async serialApi(data: SerialApi): Promise<number> {
+    const findSerialBase = (name?: string) => {
+      let ret: SerialBase | undefined
+      if (name != undefined) {
+        for (const channelId of this.serialBaseId) {
+          const item = this.serialBaseMap.get(channelId)
+          if (item && item.info.name == name) {
+            ret = item
+            break
+          }
+        }
+      } else if (this.serialBaseId.length > 0) {
+        ret = this.serialBaseMap.get(this.serialBaseId[0])
+      }
+      if (ret == undefined) {
+        throw new Error(`serial device ${name ?? ''} not found`)
+      }
+      return ret
+    }
+    const serialBase = findSerialBase(data.device)
+    if (data.method == 'write') {
+      return serialBase.write(Buffer.from(data.data), this.nodeItem.id)
+    }
+    throw new Error(`Unknown serialApi method`)
+  }
+
+  async linApi(
+    data: linApiStartSch | linApiStopSch | linApiPowerCtrl | linApiBaudRateCtrl
+  ): Promise<any> {
+    const findLinBase = (name?: string) => {
+      let ret: LinBase | undefined
+      if (name != undefined) {
+        // 只在当前节点的channel对应的linBase中查找
+        for (const channelId of this.linBaseId) {
+          const item = this.linBaseMap.get(channelId)
+          if (item && item.info.name == name) {
+            ret = item
+            break
+          }
+        }
+      } else {
+        // 返回第一个当前节点channel对应的linBase
+        if (this.linBaseId.length > 0) {
+          ret = this.linBaseMap.get(this.linBaseId[0])
+        }
+      }
+      if (ret == undefined) {
+        throw new Error(`device ${name} not found`)
+      }
+      return ret
+    }
+    switch (data.method) {
+      case 'startSch': {
+        const device = findLinBase(data.device)
+        const db = global.dataSet.database.lin[device.info.database || '']
+        if (db == undefined) {
+          throw new Error(`database is necessary`)
+        }
+        const lastSch = device.getActiveSchName()
+        device.stopSch()
+        const atviceMap: Record<string, boolean> = {}
+        if (data.activeCtrl) {
+          for (const [index, val] of data.activeCtrl.entries()) {
+            atviceMap[`${data.schName}-${index}`] = val
+          }
+        }
+        device.startSch(db, data.schName, atviceMap, data.slot || 0)
+        device.log.sendEvent(
+          `schChanged, changed from ${lastSch || 'idle'} to ${data.schName} at slot ${data.slot || 0}`,
+          getTsUs() - this.startTs
+        )
+        break
+      }
+      case 'stopSch': {
+        const device = findLinBase(data.device)
+        device.stopSch()
+        break
+      }
+
+      case 'powerCtrl': {
+        const device = findLinBase(data.device)
+        await device.powerCtrl(data.power)
+        break
+      }
+
+      case 'baudRateCtrl': {
+        const device = findLinBase(data.device)
+        const actualBaudRate = await device.baudRateCtrl(
+          data.lincableCustomBaudRatePrescale,
+          data.lincableCustomBaudRateBitMap
+        )
+        return actualBaudRate
+      }
+    }
+  }
+  async canApi(data: any): Promise<any> {
+    const { op } = data
+
+    const findCanBase = (device?: string) => {
+      if (device != undefined) {
+        for (const channelId of this.canBaseId) {
+          const item = this.canBaseMap.get(channelId)
+          if (item && item.info.name == device) return item
+        }
+        throw new Error(`CAN device '${device}' not found`)
+      }
+      if (this.canBaseId.length > 0) {
+        const item = this.canBaseMap.get(this.canBaseId[0])
+        if (item) return item
+      }
+      throw new Error('no CAN device attached to this node')
+    }
+
+    if (op === 'createConnection') {
+      const base = findCanBase(data.device)
+      const tp = new CAN_TP(base)
+      const socket = new CAN_TP_SOCKET(tp, data.addr)
+      const handle = `cantp-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      this.cantpSocketMap.set(handle, { tp, socket })
+      return handle
+    }
+
+    if (op === 'closeConnection') {
+      const entry = this.cantpSocketMap.get(data.handle)
+      if (!entry) throw new Error(`CAN-TP handle '${data.handle}' not found`)
+      entry.socket.close()
+      entry.tp.close(false)
+      this.cantpSocketMap.delete(data.handle)
+      return
+    }
+
+    if (op === 'sendData') {
+      const entry = this.cantpSocketMap.get(data.handle)
+      if (!entry) throw new Error(`CAN-TP handle '${data.handle}' not found`)
+      const ts = await entry.socket.write(Buffer.from(data.data))
+      return ts
+    }
+
+    if (op === 'recvData') {
+      const entry = this.cantpSocketMap.get(data.handle)
+      if (!entry) throw new Error(`CAN-TP handle '${data.handle}' not found`)
+      const result = await entry.socket.read(data.timeout ?? 5000)
+      return { data: Array.from(result.data), ts: result.ts }
+    }
+
+    throw new Error(`unknown canApi op: ${op}`)
+  }
+
+  private resolveSomeipClient(channel?: string): VSomeIP_Client {
+    if (channel) {
+      const c = this.someipMap.get(channel)
+      if (c) return c
+      throw new Error(`someip device not found: ${channel}`)
+    }
+    if (this.someipBaseId.length === 1) {
+      const c = this.someipMap.get(this.someipBaseId[0])
+      if (c) return c
+    }
+    throw new Error(
+      'SOME/IP device key is required (channel) when zero or multiple SOME/IP devices are attached to this node'
+    )
+  }
+
+  /**
+   * Worker RPC: SOME/IP request / notify / subscribe / unsubscribe via vSomeIP client.
+   */
+  async someipApi(data: SomeipApiCall) {
+    const base = this.resolveSomeipClient(data.channel)
+    const toBuf = (p: SomeipMessage['payload']) =>
+      Buffer.isBuffer(p) ? p : Buffer.from((p as any)?.data ?? p ?? [])
+
+    if (data.op === 'subscribe') {
+      await base.subscribeToEvent(
+        data.service,
+        data.instance,
+        data.eventgroup,
+        data.event,
+        data.major ?? 0,
+        data.timeout,
+        data.eventType
+      )
+      return { ok: true }
+    }
+    if (data.op === 'unsubscribe') {
+      await base.unsubscribeFromEvent(
+        data.service,
+        data.instance,
+        data.eventgroup,
+        data.event,
+        data.major ?? 0,
+        data.timeout
+      )
+      return { ok: true }
+    }
+
+    const msg = { ...data.msg, payload: toBuf(data.msg.payload), sending: true as const }
+
+    if (data.op === 'notify') {
+      await base.notifyEvent(
+        Number(msg.service),
+        Number(msg.instance),
+        Number(msg.method),
+        toBuf(data.msg.payload),
+        false
+      )
+      return null
+    }
+
+    if (data.op === 'requestNoReturn') {
+      await base.requestService(
+        Number(msg.service),
+        Number(msg.instance),
+        data.major ?? 0,
+        data.minor ?? 0,
+        1000
+      )
+      await base.sendRequest(msg)
+      return null
+    }
+
+    if (data.op === 'request') {
+      await base.requestService(
+        Number(msg.service),
+        Number(msg.instance),
+        data.major ?? 0,
+        data.minor ?? 0,
+        1000
+      )
+      if (msg.messageType !== SomeipMessageType.REQUEST) {
+        msg.messageType = SomeipMessageType.REQUEST
+      }
+      const resp = await base.sendRequestAndWaitResponse(msg, data.timeout)
+      return {
+        ...resp,
+        payload: Buffer.isBuffer(resp.payload) ? resp.payload : Buffer.from(resp.payload as any)
+      }
+    }
+
+    throw new Error(`unsupported someipApi op: ${(data as any).op}`)
+  }
+
+  async sendFrame(frame: CanMessage | LinMsg | SomeipMessage): Promise<number> {
+    if ('msgType' in frame) {
+      frame.msgType.uuid = this.nodeItem.id
+      if (this.canBaseId.length == 1) {
+        const baseItem = this.canBaseMap.get(this.canBaseId[0])
+        if (baseItem) {
+          return await baseItem.writeBase(frame.id, frame.msgType, frame.data, {
+            database: baseItem.info.database
+          })
+        }
+      }
+      for (const c of this.canBaseId) {
+        const baseItem = this.canBaseMap.get(c)
+        if (baseItem && baseItem.info.name == frame.device) {
+          return await baseItem.writeBase(frame.id, frame.msgType, frame.data, {
+            database: baseItem.info.database
+          })
+        }
+      }
+      throw new Error(`device ${frame.device} not found`)
+    } else if ('instance' in frame) {
+      frame.payload = Buffer.from(frame.payload)
+      if (this.someipBaseId.length == 1) {
+        const baseItem = this.someipMap.get(this.someipBaseId[0])
+        if (baseItem) {
+          return await baseItem.sendRequest(frame)
+        }
+      }
+      for (const c of this.someipBaseId) {
+        const baseItem = this.someipMap.get(c)
+        if (baseItem && baseItem.info.name == frame.device) {
+          return await baseItem.sendRequest(frame)
+        }
+      }
+      throw new Error(`device ${frame.device} not found`)
+    } else {
+      frame.uuid = this.nodeItem.id
+      frame.data = Buffer.from(frame.data)
+      if (this.linBaseId.length == 1) {
+        const baseItem = this.linBaseMap.get(this.linBaseId[0])
+        if (baseItem) {
+          baseItem.setEntry(
+            frame.frameId,
+            frame.data.length,
+            frame.direction,
+            frame.checksumType,
+            frame.data,
+            frame.isEvent ? 2 : 1
+          )
+          frame.database = baseItem.info.database
+          return await baseItem.write(frame)
+        }
+      }
+      for (const c of this.linBaseId) {
+        const baseItem = this.linBaseMap.get(c)
+        if (baseItem && baseItem.info.name == frame.device) {
+          frame.database = baseItem.info.database
+          return await baseItem.write(frame)
+        }
+      }
+      throw new Error(`device ${frame.device} not found`)
+    }
+  }
+  async sendDiag(data: {
+    device?: string
+    address?: string
+    service: ServiceItem
+    isReq: boolean
+    testerName: string
+  }): Promise<number> {
+    const tester = Object.values(this.testers).find((t) => t.name == data.testerName)
+    if (!tester) {
+      throw new Error(`tester ${data.testerName} not found`)
+    }
+    if (tester) {
+      if (tester.address.length == 0) {
+        throw new Error(`address not found in ${tester.name}`)
+      }
+      let buf
+
+      if (data.isReq) {
+        buf = getTxPdu(data.service)
+      } else {
+        buf = getRxPdu(data.service)
+      }
+
+      if (tester.type == 'can') {
+        if (this.canBaseId.length == 0) {
+          throw new Error(`channel not found`)
+        } else if (this.canBaseId.length == 1 || data.device == undefined) {
+          if (
+            (tester.address.length == 1 || data.address == undefined) &&
+            tester.address[0].canAddr
+          ) {
+            const raddr = data.isReq
+              ? tester.address[0].canAddr
+              : swapAddr(tester.address[0].canAddr)
+            raddr.uuid = this.nodeItem.id
+            const ts = await this.cantp[0].writeTp(raddr, buf)
+
+            return ts
+          } else {
+            //find address
+            const addr = tester.address.find((a) => a.canAddr?.name == data.address)
+            if (addr && addr.canAddr) {
+              const raddr = data.isReq ? addr.canAddr : swapAddr(addr.canAddr)
+              raddr.uuid = this.nodeItem.id
+              const ts = await this.cantp[0].writeTp(raddr, buf)
+
+              return ts
+            }
+          }
+        } else {
+          //find device
+          let index = -1
+          for (let i = 0; i < this.nodeItem.channel.length; i++) {
+            if (this.canBaseMap.get(this.nodeItem.channel[i])?.info.name == data.device) {
+              index = i
+              break
+            }
+          }
+          if (index >= 0) {
+            if (
+              (tester.address.length == 1 || data.address == undefined) &&
+              tester.address[0].canAddr
+            ) {
+              const raddr = data.isReq
+                ? tester.address[0].canAddr
+                : swapAddr(tester.address[0].canAddr)
+              raddr.uuid = this.nodeItem.id
+
+              const ts = await this.cantp[index].writeTp(raddr, buf)
+
+              return ts
+            } else {
+              //find address
+              const addr = tester.address.find((a) => a.canAddr?.name == data.address)
+              if (addr && addr.canAddr) {
+                const raddr = data.isReq ? addr.canAddr : swapAddr(addr.canAddr)
+                raddr.uuid = this.nodeItem.id
+                const ts = await this.cantp[index].writeTp(raddr, buf)
+                // if (data.isReq) {
+                //   await this.pool?.triggerSend(data.service, ts)
+                // } else {
+                //   await this.pool?.triggerRecv(data.service, ts)
+                // }
+                return ts
+              }
+            }
+          }
+        }
+      } else if (tester.type == 'lin') {
+        if (this.linBaseId.length == 0) {
+          throw new Error(`channel not found`)
+        } else if (this.linBaseId.length == 1 || data.device == undefined) {
+          if (
+            (tester.address.length == 1 || data.address == undefined) &&
+            tester.address[0].linAddr
+          ) {
+            const mode = data.isReq ? LinMode.MASTER : LinMode.SLAVE
+            const raddr = tester.address[0].linAddr
+
+            const ts = await this.lintp[0].writeTp(mode, raddr, buf, this.nodeItem.id)
+
+            return ts
+          } else {
+            //find address
+            const addr = tester.address.find((a) => a.linAddr?.name == data.address)
+            if (addr && addr.linAddr) {
+              const mode = data.isReq ? LinMode.MASTER : LinMode.SLAVE
+              const raddr = addr.linAddr
+
+              const ts = await this.lintp[0].writeTp(mode, raddr, buf, this.nodeItem.id)
+
+              return ts
+            }
+          }
+        } else {
+          //find device
+          let index = -1
+          for (let i = 0; i < this.nodeItem.channel.length; i++) {
+            if (this.linBaseMap.get(this.nodeItem.channel[i])?.info.name == data.device) {
+              index = i
+              break
+            }
+          }
+          if (index >= 0) {
+            if (
+              (tester.address.length == 1 || data.address == undefined) &&
+              tester.address[0].linAddr
+            ) {
+              const mode = data.isReq ? LinMode.MASTER : LinMode.SLAVE
+              const raddr = tester.address[0].linAddr
+
+              const ts = await this.lintp[index].writeTp(mode, raddr, buf, this.nodeItem.id)
+
+              return ts
+            } else {
+              //find address
+              const addr = tester.address.find((a) => a.linAddr?.name == data.address)
+              if (addr && addr.linAddr) {
+                const mode = data.isReq ? LinMode.MASTER : LinMode.SLAVE
+                const raddr = addr.linAddr
+
+                const ts = await this.lintp[index].writeTp(mode, raddr, buf, this.nodeItem.id)
+
+                return ts
+              }
+            }
+          }
+        }
+      } else if (tester.type == 'eth') {
+        if (tester.address.length == 0) {
+          throw new Error(`address not found in ${tester.name}`)
+        }
+        const send = async (inst: DOIP, aa: EthAddr) => {
+          if (data.isReq) {
+            const buf = getTxPdu(data.service)
+            const clientTcp = await inst.createClient(aa)
+            const v = await inst.writeTpReq(clientTcp, buf)
+            return v.ts
+          } else {
+            const buf = getRxPdu(data.service)
+            const v = await inst.writeTpResp(aa.tester, buf)
+            return v.ts
+          }
+        }
+        if (this.ethBaseId.length == 0) {
+          throw new Error(`channel not found`)
+        } else if (this.ethBaseId.length == 1 || data.device == undefined) {
+          const doipInst = this.doips.find((d) => d.base.id == this.ethBaseId[0])
+          if (doipInst) {
+            if (
+              (tester.address.length == 1 || data.address == undefined) &&
+              tester.address[0].ethAddr
+            ) {
+              const addr = tester.address[0].ethAddr
+              return await send(doipInst, addr)
+            } else {
+              //find address
+              const addr = tester.address.find((a) => a.ethAddr?.name == data.address)
+              if (addr && addr.ethAddr) {
+                return await send(doipInst, addr.ethAddr)
+              }
+            }
+          } else {
+            throw new Error(`Does't found attached tester`)
+          }
+        } else {
+          //find device
+          let index = -1
+          for (let i = 0; i < this.ethBaseId.length; i++) {
+            if (this.ethBaseMap.get(this.ethBaseId[i])?.name == data.device) {
+              index = i
+              break
+            }
+          }
+          if (index >= 0) {
+            const doipInst = this.doips.find((d) => d.base.id == this.ethBaseId[index])
+            if (doipInst) {
+              if (
+                (tester.address.length == 1 || data.address == undefined) &&
+                tester.address[0].ethAddr
+              ) {
+                return await send(doipInst, tester.address[0].ethAddr)
+              } else {
+                //find address
+                const addr = tester.address.find((a) => a.ethAddr?.name == data.address)
+                if (addr && addr.ethAddr) {
+                  return await send(doipInst, addr.ethAddr)
+                }
+              }
+            } else {
+              throw new Error(`Does't found attached tester`)
+            }
+          }
+        }
+      }
+    } else {
+      throw new Error(`Does't found attached tester`)
+    }
+    return 0
+  }
+  async runUdsSeq(data: { name: string; device?: string }) {
+    let targetDevice: UdsDevice | undefined
+    if (this.nodeItem.channel.length > 0) {
+      for (const id of this.nodeItem.channel) {
+        const canBase = this.canBaseMap.get(id)
+        if (canBase && (this.nodeItem.channel.length == 1 || canBase.info.name == data.device)) {
+          targetDevice = {
+            type: 'can',
+            canDevice: canBase.info
+          }
+          break
+        }
+        const linBase = this.linBaseMap.get(id)
+        if (linBase && (this.nodeItem.channel.length == 1 || linBase.info.name == data.device)) {
+          targetDevice = {
+            type: 'lin',
+            linDevice: linBase.info
+          }
+          break
+        }
+        const ethBase = this.ethBaseMap.get(id)
+        if (ethBase && (this.nodeItem.channel.length == 1 || ethBase.name == data.device)) {
+          targetDevice = {
+            type: 'eth',
+            ethDevice: ethBase
+          }
+          break
+        }
+      }
+
+      const testerName = data.name.split('.')[0]
+      const seqName = data.name.split('.')[1]
+      const targetTester = Object.values(this.testers).find((t) => t.name == testerName)
+      if (targetDevice && targetTester) {
+        const cycle = 1
+        const seqIndex = targetTester.seqList.findIndex((t) => t.name == seqName)
+        if (seqIndex == -1) {
+          throw new Error(`sequence ${seqName} not found in ${testerName}`)
+        }
+
+        const uds = new UDSTesterMain(
+          {
+            projectPath: this.projectPath,
+            projectName: this.nodeItem.name
+          },
+          targetTester,
+          targetDevice
+        )
+        if (targetDevice.type == 'can' && targetDevice.canDevice) {
+          const canBase = this.canBaseMap.get(targetDevice.canDevice.id)
+          if (canBase) {
+            uds.setCanBase(this.canBaseMap.get(targetDevice.canDevice.id))
+            this.udsTesterMap.set(data.name, uds)
+            await uds.runSequence(seqIndex, cycle)
+          } else {
+            throw new Error(
+              `can device ${targetDevice.canDevice.vendor}-${targetDevice.canDevice.handle} not found`
+            )
+          }
+        } else if (targetDevice.type == 'eth' && targetDevice.ethDevice) {
+          const id = targetDevice.ethDevice.id
+          const ethBase = this.doips.find((e) => e.base.id == id)
+          if (ethBase) {
+            uds.setDoip(ethBase)
+            this.udsTesterMap.set(data.name, uds)
+            await uds.runSequence(seqIndex, cycle)
+          } else {
+            throw new Error(
+              `eth device ${targetDevice.ethDevice.vendor}-${targetDevice.ethDevice.device.handle} not found`
+            )
+          }
+        } else if (targetDevice.type == 'lin' && targetDevice.linDevice) {
+          const id = targetDevice.linDevice.id
+          const linBase = this.linBaseMap.get(id)
+          if (linBase) {
+            uds.setLinBase(linBase)
+            this.udsTesterMap.set(data.name, uds)
+            await uds.runSequence(seqIndex, cycle)
+          } else {
+            throw new Error(
+              `lin device ${targetDevice.linDevice.vendor}-${targetDevice.linDevice.device.handle} not found`
+            )
+          }
+        }
+      }
+    }
+  }
+  stopUdsSeq(data: { name: string; device?: string }) {
+    const uds = this.udsTesterMap.get(data.name)
+    if (uds) {
+      uds.cancel()
+      this.udsTesterMap.delete(data.name)
+    }
+  }
+  close() {
+    if (this.pool) {
+      //remove can
+      this.canBaseMap.forEach((base) => {
+        if (base.txPendingNode == this) {
+          base.txPendingNode = undefined
+        }
+      })
+    }
+    for (const c of this.nodeItem.channel) {
+      const baseItem = this.canBaseMap.get(c)
+      if (baseItem) {
+        baseItem.detachCanMessage(this.boundCb)
+      }
+      const linBaseItem = this.linBaseMap.get(c)
+      if (linBaseItem) {
+        linBaseItem.detachLinMessage(this.boundCb)
+      }
+      const someipBaseItem = this.someipMap.get(c)
+      if (someipBaseItem) {
+        someipBaseItem.detachSomeipMessage(this.boundCb)
+        someipBaseItem.detachSomeipServiceValid(this.boundSomeipServiceValidCb)
+      }
+      const serialBaseItem = this.serialBaseMap.get(c)
+      if (serialBaseItem) {
+        serialBaseItem.detachSerialMessage(this.boundCb)
+      }
+    }
+    for (const e of this.freeEvent) {
+      e.doip.event.removeListener(e.id, e.cb)
+    }
+
+    this.cantp.forEach((tp) => {
+      tp.close(false)
+    })
+    for (const { socket, tp } of this.cantpSocketMap.values()) {
+      socket.close()
+      tp.close(false)
+    }
+    this.cantpSocketMap.clear()
+    this.lintp.forEach((tp) => {
+      tp.close(false)
+    })
+    this.lintp.length = 0 // 清空数组
+
+    // 清理 UdsTester 事件处理器
+    if (this.pool) {
+      // UdsTester 没有 unregisterHandler 方法，直接停止即可
+      this.pool.stop()
+    }
+
+    this.log?.close()
+
+    // 清理变量日志
+    this.varLog?.close()
+
+    // 清理 UDS 测试器映射
+    for (const [name, uds] of this.udsTesterMap) {
+      uds.cancel()
+    }
+    this.udsTesterMap.clear()
+
+    // 清理数组引用
+    this.linBaseId.length = 0
+    this.canBaseId.length = 0
+    this.ethBaseId.length = 0
+  }
+  async start(testControl?: Record<number, boolean>) {
+    this.pool?.updateTs(0)
+    if (this.pool) {
+      await this.pool.start(this.projectPath, this.nodeItem.name, testControl)
+      if (this.pool.methods.includes('__setTxPending')) {
+        //can
+        this.canBaseMap.forEach((base) => {
+          if (base.txPendingNode != undefined) {
+            sysLog.warn(
+              `Tx Pending has been registered by ${base.txPendingNode.nodeItem.name}, overwrite it by ${this.nodeItem.name}`
+            )
+          }
+          base.txPendingNode = this
+        })
+      }
+    }
+  }
+  async callTxPending(msg: CanMessage): Promise<Buffer | undefined> {
+    const res = await this.pool?.setTxPending(msg)
+    return res ? Buffer.from(res) : undefined
+  }
+  cb(frame: CanMessage | LinMsg | SomeipMessage | SerialMessage) {
+    const reportAsyncError = (e: any) => {
+      this.log?.scriptMsg(e.toString(), getTsUs(), 'error')
+    }
+    if ('msgType' in frame) {
+      if (frame.msgType.uuid != this.nodeItem.id) {
+        void this.pool?.triggerCanFrame(frame).catch(reportAsyncError)
+      }
+    } else if ('dir' in frame) {
+      // SerialMessage: don't echo a node's own outgoing frame back to itself
+      if (!(frame.dir == 'OUT' && frame.uuid == this.nodeItem.id)) {
+        void this.pool?.triggerSerialFrame(frame).catch(reportAsyncError)
+      }
+    } else if ('instance' in frame) {
+      void this.pool?.triggerSomeipFrame(frame).catch(reportAsyncError)
+    } else {
+      if (frame.uuid != this.nodeItem.id || frame.direction == LinDirection.RECV) {
+        void this.pool?.triggerLinFrame(frame).catch(reportAsyncError)
+      }
+    }
+  }
+  private someipServiceValidCb(info: VsomeipAvailabilityInfo) {
+    const reportAsyncError = (e: any) => {
+      this.log?.scriptMsg(e.toString(), getTsUs(), 'error')
+    }
+    void this.pool?.triggerSomeipServiceValid(info).catch(reportAsyncError)
+  }
+}

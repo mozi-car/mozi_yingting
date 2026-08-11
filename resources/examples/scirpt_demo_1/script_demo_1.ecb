@@ -1,0 +1,487 @@
+{
+  "data": {
+    "devices": {
+      "2ceda232-8d4e-4597-88f2-d68bef6fa75d": {
+        "type": "can",
+        "canDevice": {
+          "id": "2ceda232-8d4e-4597-88f2-d68bef6fa75d",
+          "name": "SIMULATE_0",
+          "handle": 0,
+          "vendor": "simulate",
+          "canfd": false,
+          "bitrate": {
+            "sjw": 1,
+            "timeSeg1": 13,
+            "timeSeg2": 2,
+            "preScaler": 10,
+            "freq": 500000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_16"
+          }
+        }
+      },
+      "3f283e56-e2ea-4d38-8aa3-0219f0b58f7e": {
+        "type": "can",
+        "canDevice": {
+          "id": "3f283e56-e2ea-4d38-8aa3-0219f0b58f7e",
+          "name": "SIMULATE_1",
+          "handle": 1,
+          "vendor": "simulate",
+          "canfd": false,
+          "bitrate": {
+            "sjw": 1,
+            "timeSeg1": 13,
+            "timeSeg2": 2,
+            "preScaler": 10,
+            "freq": 500000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_30"
+          }
+        }
+      }
+    },
+    "ia": {
+      "1931bbe6-08c4-49f3-9918-a25c1a35143b": {
+        "name": "Can IA",
+        "type": "can",
+        "id": "1931bbe6-08c4-49f3-9918-a25c1a35143b",
+        "devices": [
+          "3f283e56-e2ea-4d38-8aa3-0219f0b58f7e"
+        ],
+        "action": [
+          {
+            "trigger": {
+              "type": "manual"
+            },
+            "name": "",
+            "id": "1",
+            "channel": "3f283e56-e2ea-4d38-8aa3-0219f0b58f7e",
+            "type": "can",
+            "dlc": 3,
+            "data": [
+              "11",
+              "22",
+              "33"
+            ],
+            "_X_ROW_KEY": "row_63"
+          },
+          {
+            "trigger": {
+              "type": "manual"
+            },
+            "name": "",
+            "id": "2",
+            "channel": "3f283e56-e2ea-4d38-8aa3-0219f0b58f7e",
+            "type": "can",
+            "dlc": 1,
+            "data": [
+              "22"
+            ],
+            "_X_ROW_KEY": "row_72"
+          }
+        ]
+      }
+    },
+    "tester": {},
+    "subFunction": {},
+    "nodes": {
+      "dbd775b7-e4c8-4fe1-be19-f0819503c510": {
+        "name": "Node 1",
+        "type": "can",
+        "id": "dbd775b7-e4c8-4fe1-be19-f0819503c510",
+        "channel": [
+          "2ceda232-8d4e-4597-88f2-d68bef6fa75d"
+        ],
+        "script": "node.ts"
+      }
+    },
+    "database": {
+      "lin": {}
+    }
+  },
+  "project": {
+    "example": {
+      "catalog": "Script"
+    },
+    "wins": {
+      "message": {
+        "pos": {
+          "x": 383,
+          "y": 157.66668701171875,
+          "w": 1540,
+          "h": 280
+        },
+        "options": {
+          "params": {}
+        },
+        "title": "message",
+        "label": "Message",
+        "id": "message",
+        "layoutType": "bottom",
+        "hide": true
+      },
+      "network": {
+        "pos": {
+          "x": 0,
+          "y": 0,
+          "w": 853.5,
+          "h": 580
+        },
+        "title": "network",
+        "label": "Network",
+        "id": "network",
+        "options": {},
+        "hide": true
+      },
+      "1931bbe6-08c4-49f3-9918-a25c1a35143b_ia": {
+        "pos": {
+          "x": 853.5,
+          "y": 0,
+          "w": 853.5,
+          "h": 290
+        },
+        "title": "cani",
+        "label": "IA",
+        "id": "1931bbe6-08c4-49f3-9918-a25c1a35143b_ia",
+        "options": {
+          "params": {
+            "edit-index": "1931bbe6-08c4-49f3-9918-a25c1a35143b"
+          },
+          "name": "Can IA"
+        },
+        "hide": true
+      },
+      "trace": {
+        "pos": {
+          "x": 853.5,
+          "y": 280,
+          "w": 860,
+          "h": 300
+        },
+        "title": "trace",
+        "label": "Trace",
+        "id": "trace",
+        "options": {},
+        "hide": true
+      },
+      "c94170b3-08af-4443-9022-4cc85f1ae02d": {
+        "pos": {
+          "x": 0,
+          "y": -28,
+          "w": 1707,
+          "h": 608
+        },
+        "title": "ldf",
+        "label": "LDF",
+        "id": "c94170b3-08af-4443-9022-4cc85f1ae02d",
+        "options": {
+          "params": {
+            "edit-index": "c94170b3-08af-4443-9022-4cc85f1ae02d",
+            "ldf": {
+              "eventTriggeredFrames": {},
+              "sporadicFrames": {},
+              "signalRep": {
+                "encTemperature": [
+                  "Motor1Temp",
+                  "Motor2Temp"
+                ]
+              },
+              "global": {
+                "LIN_protocol_version": "2.1",
+                "LIN_language_version": "2.1",
+                "LIN_speed": 19.2
+              },
+              "node": {
+                "master": {
+                  "nodeName": "SeatECU",
+                  "timeBase": 5,
+                  "jitter": 0.1
+                },
+                "salveNode": [
+                  "Motor1",
+                  "Motor2"
+                ]
+              },
+              "signals": {
+                "Motor1ErrorCode": {
+                  "signalName": "Motor1ErrorCode",
+                  "signalSizeBits": 8,
+                  "initValue": 5,
+                  "punishedBy": "Motor1",
+                  "subscribedBy": [
+                    "SeatECU"
+                  ],
+                  "singleType": "Scalar"
+                },
+                "Motor1ErrorValue": {
+                  "signalName": "Motor1ErrorValue",
+                  "signalSizeBits": 8,
+                  "initValue": 1,
+                  "punishedBy": "Motor1",
+                  "subscribedBy": [
+                    "SeatECU"
+                  ],
+                  "singleType": "Scalar"
+                },
+                "Motor1LinError": {
+                  "signalName": "Motor1LinError",
+                  "signalSizeBits": 1,
+                  "initValue": 0,
+                  "punishedBy": "Motor1",
+                  "subscribedBy": [
+                    "SeatECU"
+                  ],
+                  "singleType": "Scalar"
+                },
+                "Motor1Position": {
+                  "signalName": "Motor1Position",
+                  "signalSizeBits": 32,
+                  "initValue": [
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "punishedBy": "Motor1",
+                  "subscribedBy": [
+                    "SeatECU"
+                  ],
+                  "singleType": "ByteArray"
+                },
+                "Motor1Temp": {
+                  "signalName": "Motor1Temp",
+                  "signalSizeBits": 8,
+                  "initValue": 5,
+                  "punishedBy": "Motor1",
+                  "subscribedBy": [
+                    "SeatECU"
+                  ],
+                  "singleType": "Scalar"
+                },
+                "Motor2ErrorCode": {
+                  "signalName": "Motor2ErrorCode",
+                  "signalSizeBits": 8,
+                  "initValue": 2,
+                  "punishedBy": "Motor2",
+                  "subscribedBy": [
+                    "SeatECU"
+                  ],
+                  "singleType": "Scalar"
+                },
+                "Motor2ErrorValue": {
+                  "signalName": "Motor2ErrorValue",
+                  "signalSizeBits": 8,
+                  "initValue": 4,
+                  "punishedBy": "Motor2",
+                  "subscribedBy": [
+                    "SeatECU"
+                  ],
+                  "singleType": "Scalar"
+                },
+                "Motor2LinError": {
+                  "signalName": "Motor2LinError",
+                  "signalSizeBits": 1,
+                  "initValue": 0,
+                  "punishedBy": "Motor2",
+                  "subscribedBy": [
+                    "SeatECU"
+                  ],
+                  "singleType": "Scalar"
+                },
+                "Motor2Position": {
+                  "signalName": "Motor2Position",
+                  "signalSizeBits": 32,
+                  "initValue": [
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "punishedBy": "Motor2",
+                  "subscribedBy": [
+                    "SeatECU"
+                  ],
+                  "singleType": "ByteArray"
+                }
+              },
+              "frames": {
+                "Motor1Control": {
+                  "name": "Motor1Control",
+                  "id": 48,
+                  "publishedBy": "SeatECU",
+                  "frameSize": 1,
+                  "signals": [
+                    {
+                      "name": "Motor1Selection",
+                      "offset": 0
+                    }
+                  ]
+                },
+                "Motor1State_Cycl": {
+                  "name": "Motor1State_Cycl",
+                  "id": 51,
+                  "publishedBy": "Motor1",
+                  "frameSize": 6,
+                  "signals": [
+                    {
+                      "name": "Motor1Temp",
+                      "offset": 0
+                    },
+                    {
+                      "name": "Motor1Position",
+                      "offset": 8
+                    },
+                    {
+                      "name": "Motor1LinError",
+                      "offset": 40
+                    }
+                  ]
+                },
+                "Motor1State_Event": {
+                  "name": "Motor1State_Event",
+                  "id": 54,
+                  "publishedBy": "Motor1",
+                  "frameSize": 3,
+                  "signals": [
+                    {
+                      "name": "Motor1ErrorCode",
+                      "offset": 8
+                    },
+                    {
+                      "name": "Motor1ErrorValue",
+                      "offset": 16
+                    }
+                  ]
+                },
+                "Motor2Control": {
+                  "name": "Motor2Control",
+                  "id": 49,
+                  "publishedBy": "SeatECU",
+                  "frameSize": 1,
+                  "signals": [
+                    {
+                      "name": "Motor2Selection",
+                      "offset": 0
+                    }
+                  ]
+                }
+              },
+              "nodeAttrs": {
+                "Motor1": {
+                  "LIN_protocol": "2.1",
+                  "configured_NAD": 2,
+                  "initial_NAD": 10,
+                  "supplier_id": 30,
+                  "function_id": 1,
+                  "variant": 0,
+                  "response_error": "Motor1LinError",
+                  "fault_state_signals": [
+                    "Motor1ErrorValue",
+                    "Motor1ErrorCode"
+                  ],
+                  "P2_min": 100,
+                  "ST_min": 20,
+                  "N_As_timeout": 1000,
+                  "N_Cr_timeout": 1000,
+                  "configFrames": [
+                    "MotorsControl",
+                    "Motor1Control",
+                    "Motor1State_Cycl",
+                    "Motor1State_Event"
+                  ]
+                },
+                "Motor2": {
+                  "LIN_protocol": "2.1",
+                  "configured_NAD": 3,
+                  "initial_NAD": 12,
+                  "supplier_id": 46,
+                  "function_id": 11,
+                  "variant": 1,
+                  "response_error": "Motor2LinError",
+                  "fault_state_signals": [
+                    "Motor2ErrorValue",
+                    "Motor2ErrorCode"
+                  ],
+                  "P2_min": 50,
+                  "ST_min": 0,
+                  "N_As_timeout": 1000,
+                  "N_Cr_timeout": 1000,
+                  "configFrames": [
+                    "MotorsControl",
+                    "Motor2Control",
+                    "Motor2State_Cycl",
+                    "Motor2State_Event"
+                  ]
+                }
+              },
+              "schTables": [
+                {
+                  "name": "NormalTable",
+                  "entries": [
+                    {
+                      "name": "MotorsControl",
+                      "delay": 10,
+                      "isCommand": false
+                    },
+                    {
+                      "name": "Motor1State_Cycl",
+                      "delay": 10,
+                      "isCommand": false
+                    },
+                    {
+                      "name": "Motor2State_Cycl",
+                      "delay": 10,
+                      "isCommand": false
+                    }
+                  ]
+                },
+                {
+                  "name": "Motor1Table",
+                  "entries": [
+                    {
+                      "name": "Motor1Control",
+                      "delay": 5,
+                      "isCommand": false
+                    },
+                    {
+                      "name": "Motor1State_Event",
+                      "delay": 10,
+                      "isCommand": false
+                    }
+                  ]
+                }
+              ],
+              "signalEncodeTypes": {
+                "encTemperature": {
+                  "name": "encTemperature",
+                  "encodingTypes": [
+                    {
+                      "type": "physicalValue",
+                      "physicalValue": {
+                        "minValue": 0,
+                        "maxValue": 80,
+                        "scale": 0.5,
+                        "offset": -20,
+                        "textInfo": "Degree"
+                      }
+                    }
+                  ]
+                }
+              },
+              "name": "te"
+            }
+          },
+          "name": "te"
+        },
+        "hide": false,
+        "backupPos": {
+          "x": 406,
+          "y": 156,
+          "w": 860,
+          "h": 500
+        },
+        "isMax": true
+      }
+    }
+  }
+}

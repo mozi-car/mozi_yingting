@@ -1,0 +1,17 @@
+{
+  "name": "@ecubus-pro/main-plugin-sdk",
+  "version": "0.0.12",
+  "description": "yingting main plugin SDK",
+  "type": "commonjs",
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ecubus/EcuBus-Pro"
+  },
+  "sideEffects": false
+}
+

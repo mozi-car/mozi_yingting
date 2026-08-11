@@ -1,0 +1,508 @@
+import type { CanDB, Message, Signal } from 'src/main/share/can'
+
+// Convert two's complement to signed value
+function fromTwosComplement(value: number, bits: number): number {
+  if (value & (1 << (bits - 1))) {
+    return -((~value + 1) & ((1 << bits) - 1))
+  }
+  return value
+}
+
+// Calculate max raw value based on signal length
+export function getMaxRawValue(length: number): number {
+  return Math.pow(2, length) - 1
+}
+
+// Convert physical value to raw value
+function physToRaw(phys: number, row: Signal): number {
+  let rawValue = Math.round((phys - Number(row.offset)) / Number(row.factor))
+
+  // Get max value based on length
+  const maxRaw = getMaxRawValue(row.bit_length)
+
+  if (row.is_signed) {
+    // For signed values, handle negative numbers with two's complement
+    if (rawValue < 0) {
+      rawValue = toTwosComplement(rawValue, row.bit_length)
+    } else if (rawValue > maxRaw / 2) {
+      // Limit positive values to max signed value
+      rawValue = Math.floor(maxRaw / 2)
+    }
+  } else {
+    // For unsigned values, simply clamp between 0 and max
+    rawValue = Math.min(Math.max(rawValue, 0), maxRaw)
+  }
+
+  return rawValue
+}
+// Convert signed value to two's complement
+function toTwosComplement(value: number, bits: number): number {
+  if (value >= 0) return value
+  const mask = (1 << bits) - 1
+  return (~-value + 1) & mask
+}
+
+// Convert raw value to physical value
+export function rawToPhys(raw: number, row: Signal): number {
+  let actualValue = raw
+
+  if (row.is_signed) {
+    // Only convert from two's complement if it's a signed value
+    const maxRaw = getMaxRawValue(row.bit_length)
+    if (raw > maxRaw / 2) {
+      // If the value is in the negative range of two's complement
+      actualValue = fromTwosComplement(raw, row.bit_length)
+    }
+  }
+
+  return actualValue * Number(row.factor) + Number(row.offset)
+}
+
+export function updateSignalRaw(signal: Signal) {
+  if (signal.value === undefined) {
+    return
+  }
+
+  const vv = signal.values[signal.value]
+  if (vv) {
+    // For enum values, directly set the raw value as phys value
+    signal.physValue = vv
+    return
+  }
+  {
+    // Handle float value types
+    if (signal.is_float) {
+      // Handle both IEEE Float (32-bit) and Double (64-bit) in one block
+      if (signal.bit_length === 64) {
+        // IEEE Double (double precision, 64-bit)
+        const buffer = new ArrayBuffer(8)
+        const view = new DataView(buffer)
+        const big = BigInt(signal.value)
+        // For simplicity assuming the 64-bit value fits in 53 bits of JS number
+        view.setUint32(0, Number(big & 0xffffffffn), true) // Lower 32 bits
+        view.setUint32(4, Number(big >> 32n), true) // Upper 32 bits (might be 0 in JS)
+        const val = view.getFloat64(0, true)
+        signal.physValue = Number.isInteger(val) ? `${val}.0` : val.toString()
+      } else {
+        // IEEE Float (single precision, 32-bit)
+        const buffer = new ArrayBuffer(4)
+        const view = new DataView(buffer)
+        view.setUint32(0, Number(signal.value), true) // true for little-endian
+        const val = view.getFloat32(0, true)
+        signal.physValue = Number.isInteger(val) ? `${val}.0` : val.toString()
+      }
+    } else {
+      // Calculate new physical value for regular integer signals
+      const newPhysValue = rawToPhys(Number(signal.value), signal)
+      signal.physValue = newPhysValue.toString()
+      if (signal.min != signal.max) {
+        if (newPhysValue < Number(signal.min)) {
+          signal.value = physToRaw(Number(signal.min), signal).toString()
+          signal.physValue = signal.min
+        } else if (newPhysValue > Number(signal.max)) {
+          signal.value = physToRaw(Number(signal.max), signal).toString()
+          signal.physValue = signal.max
+        }
+      }
+    }
+  }
+}
+export function updateSignalPhys(row: Signal, db: CanDB) {
+  const t1 = Date.now()
+  if (row.physValue === undefined) return
+  for (const [key, value] of Object.entries(row.values)) {
+    if (value === row.physValue) {
+      row.value = key
+      return
+    }
+  }
+
+  // Handle float value types
+  if (row.is_float) {
+    if (row.bit_length === 32) {
+      const buffer = new ArrayBuffer(4)
+      const view = new DataView(buffer)
+      view.setFloat32(0, Number(row.physValue), true) // true for little-endian
+      row.value = view.getUint32(0, true).toString()
+    } else {
+      const buffer = new ArrayBuffer(8)
+      const view = new DataView(buffer)
+      view.setFloat64(0, Number(row.physValue), true) // true for little-endian
+      row.value = view.getUint32(0, true).toString()
+    }
+  } else {
+    // Clamp physical value to min/max if defined
+    let clampedPhysValue = row.physValue
+    if (row.min != row.max) {
+      if (Number(clampedPhysValue) < Number(row.min)) {
+        clampedPhysValue = row.min
+      } else if (Number(clampedPhysValue) > Number(row.max)) {
+        clampedPhysValue = row.max
+      }
+      if (clampedPhysValue !== row.physValue) {
+        row.physValue = clampedPhysValue
+      }
+    }
+
+    // Calculate and set raw value
+    row.value = physToRaw(Number(clampedPhysValue), row).toString()
+  }
+  const t2 = Date.now()
+  console.log('updateSignalPhys', t2 - t1)
+}
+
+/**
+ * Check if multiplexer value matches signal's mux condition (canmatrix format).
+ * mux_val_grp: number[][] - array of [min, max] ranges
+ * mux_value: number - single value match
+ */
+function isMuxMatch(signal: Signal, muxValue: number): boolean {
+  if (signal.mux_val_grp && signal.mux_val_grp.length > 0) {
+    return signal.mux_val_grp.some((range) => muxValue >= range[0] && muxValue <= range[1])
+  }
+  if (signal.mux_value !== undefined && signal.mux_value !== null) {
+    return signal.mux_value === muxValue
+  }
+  return false
+}
+
+/**
+ * Get signals that are currently active (visible) based on multiplexer values.
+ * Uses canmatrix-style hierarchical multiplexing.
+ */
+export function getActiveSignals(message: Message): Signal[] {
+  const signals = message.signals || []
+  const muxValues: Record<string, number> = {}
+
+  const multiplexers = signals.filter((s) => s.is_multiplexer)
+  const getMuxerDepth = (s: Signal): number => {
+    if (!s.muxer_for_signal) return 0
+    const parent = signals.find((x) => x.name === s.muxer_for_signal)
+    return parent ? getMuxerDepth(parent) + 1 : 0
+  }
+  multiplexers
+    .sort((a, b) => getMuxerDepth(a) - getMuxerDepth(b))
+    .forEach((signal) => {
+      const parentMux = signal.muxer_for_signal
+      const rawVal =
+        signal.value !== undefined ? Number(signal.value) : Number(signal.initial_value)
+      if (!parentMux) {
+        if (!Number.isNaN(rawVal)) muxValues[signal.name] = rawVal
+      } else {
+        const parentVal = muxValues[parentMux]
+        if (parentVal !== undefined && isMuxMatch(signal, parentVal) && !Number.isNaN(rawVal)) {
+          muxValues[signal.name] = rawVal
+        }
+      }
+    })
+
+  return signals.filter((signal) => {
+    if (signal.is_multiplexer) {
+      if (!signal.muxer_for_signal) return true
+      const parentVal = muxValues[signal.muxer_for_signal]
+      return parentVal !== undefined && isMuxMatch(signal, parentVal)
+    }
+    if (!signal.muxer_for_signal) return true
+    const muxVal = muxValues[signal.muxer_for_signal]
+    return muxVal !== undefined && isMuxMatch(signal, muxVal)
+  })
+}
+
+export function writeMessageData(message: Message, data: Buffer, db: CanDB) {
+  const signals = message.signals || []
+  const muxValues: Record<string, number> = {}
+
+  // 1. Process multiplexers in dependency order (canmatrix-style hierarchical mux)
+  const multiplexers = signals.filter((s) => s.is_multiplexer)
+  const getMuxerDepth = (s: Signal): number => {
+    if (!s.muxer_for_signal) return 0
+    const parent = signals.find((x) => x.name === s.muxer_for_signal)
+    return parent ? getMuxerDepth(parent) + 1 : 0
+  }
+  multiplexers
+    .sort((a, b) => getMuxerDepth(a) - getMuxerDepth(b))
+    .forEach((signal) => {
+      const parentMux = signal.muxer_for_signal
+      if (!parentMux) {
+        readSignalFromBuffer(signal, data, db)
+        muxValues[signal.name] = Number(signal.value)
+      } else {
+        const parentVal = muxValues[parentMux]
+        if (parentVal !== undefined && isMuxMatch(signal, parentVal)) {
+          readSignalFromBuffer(signal, data, db)
+          muxValues[signal.name] = Number(signal.value)
+        }
+      }
+    })
+
+  // 2. Process multiplexed and normal signals
+  signals.forEach((signal) => {
+    if (signal.is_multiplexer) return
+
+    const muxerName = signal.muxer_for_signal
+    if (!muxerName) {
+      readSignalFromBuffer(signal, data, db)
+      return
+    }
+
+    const muxVal = muxValues[muxerName]
+    if (muxVal !== undefined && isMuxMatch(signal, muxVal)) {
+      readSignalFromBuffer(signal, data, db)
+    }
+  })
+}
+
+// 从缓冲区读取信号值的辅助函数
+function readSignalFromBuffer(signal: Signal, data: Buffer, db: CanDB) {
+  let rawValue = 0
+
+  if (!signal.is_big_endian) {
+    // Intel格式 (Little Endian)
+    let startByte = Math.floor(signal.start_bit / 8)
+    let startBitInByte = signal.start_bit % 8
+    let remainingBits = signal.bit_length
+    let valueIndex = 0
+
+    while (remainingBits > 0 && startByte < data.length) {
+      const bitsInThisByte = Math.min(8 - startBitInByte, remainingBits)
+      const mask = (1 << bitsInThisByte) - 1
+      const value = (data[startByte] >> startBitInByte) & mask
+
+      rawValue |= value << valueIndex
+
+      remainingBits -= bitsInThisByte
+      valueIndex += bitsInThisByte
+      startByte += 1
+      startBitInByte = 0
+    }
+  } else {
+    // Motorola格式 (Big Endian) - 修改后的版本
+    let currentBit = signal.start_bit // 从startBit开始，这是LSB的位置
+    let remainingBits = signal.bit_length
+    let valueShift = 0 // 用于组装value的位偏移量
+
+    while (remainingBits > 0) {
+      const currentByte = Math.floor(currentBit / 8)
+      const bitInByte = currentBit % 8
+
+      if (currentByte < 0 || currentByte >= data.length) break
+
+      // 从buffer中提取当前bit
+      const bitValue = (data[currentByte] >> bitInByte) & 1
+
+      // 将bit添加到rawValue中
+      rawValue |= bitValue << valueShift
+
+      remainingBits--
+      valueShift++
+
+      // Motorola格式的bit遍历规则（与写入相同）
+      if (bitInByte === 7) {
+        // 当前在byte的最高位，跳转到前一个byte的最低位
+        currentBit -= 15 // 从bit 39跳转到bit 24
+      } else {
+        // 在byte内向高位移动
+        currentBit++
+      }
+    }
+  }
+
+  // For unsigned signals, JavaScript bitwise ops treat 32-bit values as signed.
+  // Convert to unsigned so values like 0x80000002 become 2147483650, not -2147483646.
+  if (!signal.is_float && !signal.is_signed) {
+    rawValue = rawValue >>> 0
+  }
+
+  let physValue = rawValue
+
+  // 检查原始值是否合法
+  const maxValue = Math.pow(2, signal.bit_length) - 1
+  if (rawValue > maxValue) {
+    return // 如果值超出信号长度允许的范围，不更新信号
+  }
+
+  // 对于枚举值，检查值是否在有效范围内
+  // if (signal.values) {
+  //   const validValues = Object.values(signal.values).map((v) => v.value)
+  //   if (!validValues.includes(rawValue)) {
+  //     return // 如果值不在枚举列表中，不更新信号
+  //   }
+  // } else if (signal.valueTable) {
+  //   // 如果有值表，检查值是否在值表范围内
+
+  //   const vt = Object.values(db.valueTables).find((vt) => vt.name === signal.valueTable)
+  //   if (vt) {
+  //     const validValues = vt.values.map((v) => v.value)
+  //     if (!validValues.includes(rawValue)) {
+  //       return // 如果值不在值表中，不更新信号
+  //     }
+  //   }
+  // } else
+
+  {
+    // 对于数值类型信号，检查是否在最小值和最大值范围内
+
+    if (signal.is_float) {
+      if (signal.bit_length === 32) {
+        //convert to IEEE Float
+        physValue = new Float32Array(new Uint32Array([physValue]).buffer)[0]
+      } else {
+        //convert to IEEE Double
+        physValue = new Float64Array(new Uint32Array([physValue]).buffer)[0]
+      }
+    } else if (signal.is_signed) {
+      // 检查最高位是否为1（负数）
+      const isNegative = (rawValue & (1 << (signal.bit_length - 1))) !== 0
+      if (isNegative) {
+        // 转换为有符号值
+        const signBit = 1 << (signal.bit_length - 1)
+        const valueMask = signBit - 1
+        physValue = -((~rawValue & valueMask) + 1)
+      }
+    }
+    // 计算物理值
+    physValue = physValue * Number(signal.factor) + Number(signal.offset)
+
+    // if (signal.minimum != signal.maximum) {
+    //   // 检查物理值是否在有效范围内
+    //   if (signal.minimum !== undefined && physValue < signal.minimum) {
+    //     console.log('physValue', physValue,signal.minimum,signal.attributes,signal.maximum)
+    //     return // 如果物理值小于最小值，不更新信号
+    //   }
+    //   if (signal.maximum !== undefined && physValue > signal.maximum) {
+    //     console.log('physValue', physValue,signal.minimum,signal.attributes,signal.maximum)
+    //     return // 如果物理值大于最大值，不更新信号
+    //   }
+    // }
+  }
+
+  // 所有检查都通过后，更新信号值
+  signal.value = rawValue.toString()
+  if (signal.is_float) {
+    signal.physValue = Number.isInteger(physValue) ? `${physValue}.0` : physValue.toString()
+  } else {
+    signal.physValue = physValue.toString()
+  }
+
+  // 更新物理值
+  const vv = signal.values[signal.value]
+  if (vv) {
+    signal.physValue = vv
+  }
+}
+
+export function getMessageData(message: Message): Buffer {
+  const data = Buffer.alloc(message.length)
+  const signals = message.signals || []
+  const muxValues: Record<string, number> = {}
+
+  // 1. Process multiplexers in dependency order (canmatrix-style hierarchical mux)
+  const multiplexers = signals.filter((s) => s.is_multiplexer)
+  const getMuxerDepth = (s: Signal): number => {
+    if (!s.muxer_for_signal) return 0
+    const parent = signals.find((x) => x.name === s.muxer_for_signal)
+    return parent ? getMuxerDepth(parent) + 1 : 0
+  }
+  multiplexers
+    .sort((a, b) => getMuxerDepth(a) - getMuxerDepth(b))
+    .forEach((signal) => {
+      if (signal.value === undefined) return
+      const parentMux = signal.muxer_for_signal
+      if (!parentMux) {
+        writeSignalToBuffer(signal, data)
+        muxValues[signal.name] = Number(signal.value)
+      } else {
+        const parentVal = muxValues[parentMux]
+        if (parentVal !== undefined && isMuxMatch(signal, parentVal)) {
+          writeSignalToBuffer(signal, data)
+          muxValues[signal.name] = Number(signal.value)
+        }
+      }
+    })
+
+  // 2. Process multiplexed and normal signals
+  signals.forEach((signal) => {
+    if (signal.is_multiplexer) return
+    if (signal.value === undefined) return
+
+    const muxerName = signal.muxer_for_signal
+    if (!muxerName) {
+      writeSignalToBuffer(signal, data)
+      return
+    }
+
+    const muxVal = muxValues[muxerName]
+    if (muxVal !== undefined && isMuxMatch(signal, muxVal)) {
+      writeSignalToBuffer(signal, data)
+    }
+  })
+
+  return data
+}
+
+// 将信号写入缓冲区的辅助函数
+function writeSignalToBuffer(signal: Signal, data: Buffer) {
+  let rawValue = Number(signal.value)
+  if (rawValue === undefined) return
+
+  const maxValue = Math.pow(2, signal.bit_length) - 1
+  rawValue = Math.min(rawValue, maxValue)
+
+  if (!signal.is_big_endian) {
+    // Intel格式 (Little Endian)
+    let startByte = Math.floor(signal.start_bit / 8)
+    let startBitInByte = signal.start_bit % 8
+    let remainingBits = signal.bit_length
+    let valueIndex = 0
+
+    while (remainingBits > 0) {
+      if (startByte >= data.length) break
+
+      const bitsInThisByte = Math.min(8 - startBitInByte, remainingBits)
+      const mask = (1 << bitsInThisByte) - 1
+      const value = (rawValue >> valueIndex) & mask
+
+      data[startByte] &= ~(mask << startBitInByte)
+      data[startByte] |= value << startBitInByte
+
+      remainingBits -= bitsInThisByte
+      valueIndex += bitsInThisByte
+      startByte += 1
+      startBitInByte = 0
+    }
+  } else {
+    // Motorola格式 (Big Endian) - 根据实际测试数据修正
+    let currentBit = signal.start_bit // 从startBit开始，这是LSB的位置
+    let remainingBits = signal.bit_length
+    let valueShift = 0 // 用于从value中提取bit的偏移量
+
+    while (remainingBits > 0) {
+      const currentByte = Math.floor(currentBit / 8)
+      const bitInByte = currentBit % 8
+
+      if (currentByte < 0 || currentByte >= data.length) break
+
+      // 从value中提取当前bit
+      const bitValue = (rawValue >> valueShift) & 1
+
+      // 清除目标bit并设置新值
+      const bitMask = 1 << bitInByte
+      data[currentByte] &= ~bitMask
+      if (bitValue) {
+        data[currentByte] |= bitMask
+      }
+
+      remainingBits--
+      valueShift++
+
+      // Motorola格式的bit遍历规则
+      if (bitInByte === 7) {
+        // 当前在byte的最高位，跳转到前一个byte的最低位
+        currentBit -= 15 // 从bit 39跳转到bit 24
+      } else {
+        // 在byte内向高位移动
+        currentBit++
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@ecubus-pro/renderer-plugin-sdk",
+  "version": "0.0.10",
+  "description": "yingting renderer plugin SDK",
+  "type": "module",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "vue": ">=3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ecubus/EcuBus-Pro"
+  }
+}
+

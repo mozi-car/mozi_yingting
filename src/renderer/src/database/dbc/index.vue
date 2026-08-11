@@ -1,0 +1,543 @@
+<template>
+  <div v-loading="loading">
+    <el-tabs v-if="!loading" v-model="editableTabsValue" class="dbcTabs" type="card" addable>
+      <template #add-icon>
+        <el-tooltip
+          effect="light"
+          :content="i18next.t('database.dbc.index.tooltips.deleteDatabase')"
+          placement="bottom"
+        >
+          <el-button type="info" link @click="deleteDatabase">
+            <Icon :icon="deleteIcon" />
+          </el-button>
+        </el-tooltip>
+        <el-tooltip
+          effect="light"
+          :content="i18next.t('database.dbc.index.tooltips.updateDatabase')"
+          placement="bottom"
+        >
+          <el-button type="primary" link :disabled="globalStart" @click="updateDatabaseFromFile">
+            <Icon :icon="refreshIcon" />
+          </el-button>
+        </el-tooltip>
+        <el-tooltip
+          v-if="errorList.length == 0"
+          effect="light"
+          :content="i18next.t('database.dbc.index.tooltips.saveDatabase')"
+          placement="bottom"
+        >
+          <el-button type="success" link @click="saveDataBase">
+            <Icon :icon="saveIcon" :disabled="globalStart" />
+          </el-button>
+        </el-tooltip>
+        <el-tooltip
+          v-else
+          effect="light"
+          :content="i18next.t('database.dbc.index.tooltips.fixErrorsToSave')"
+          placement="bottom"
+        >
+          <el-button
+            type="danger"
+            link
+            :disabled="globalStart"
+            @click="handleTabSwitch('Overview')"
+          >
+            <Icon :icon="saveIcon" />
+          </el-button>
+        </el-tooltip>
+      </template>
+      <el-tab-pane name="Overview" :label="i18next.t('database.dbc.index.tabs.overview')">
+        <Overview
+          ref="overfiewRef"
+          v-model="dbcObj"
+          :edit-index="props.editIndex"
+          :height="h"
+          :width="w"
+        />
+
+        <!-- Add error section -->
+        <template v-if="errorList.length != 0">
+          <div class="error-section">
+            <el-divider />
+
+            <VxeGrid v-if="errorList.length > 0" ref="errorGrid" v-bind="errorGridOptions">
+              <template #message="{ row }">
+                <span class="error-type">{{ row.message }}</span>
+              </template>
+              <template #tab="{ row }">
+                <el-button link type="danger" size="small" @click="handleTabSwitch(row.tab)">{{
+                  row.tab
+                }}</el-button>
+              </template>
+            </VxeGrid>
+          </div>
+        </template>
+      </el-tab-pane>
+      <el-tab-pane name="Value Tables" :label="i18next.t('database.dbc.index.tabs.valueTables')">
+        <ValTable
+          ref="valueTableRef"
+          v-model="dbcObj"
+          :edit-index="props.editIndex"
+          :height="h"
+          :width="w"
+        />
+      </el-tab-pane>
+      <el-tab-pane name="Attributes" :label="i18next.t('database.dbc.index.tabs.attributes')">
+        <AttrTable
+          ref="attrTableRef"
+          v-model="dbcObj"
+          :edit-index="props.editIndex"
+          :height="h"
+          :width="w"
+        />
+      </el-tab-pane>
+      <el-tab-pane name="Export" :label="i18next.t('database.dbc.index.tabs.export')">
+        <Export v-model="dbcObj" :edit-index="props.editIndex" :height="h" :width="w" />
+      </el-tab-pane>
+    </el-tabs>
+  </div>
+</template>
+
+<script setup lang="ts">
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  shallowRef,
+  triggerRef,
+  watch,
+  toRef,
+  inject,
+  provide,
+  markRaw,
+  ShallowRef
+} from 'vue'
+import Overview from './overfiew.vue'
+import ValTable from './valTable.vue'
+import AttrTable from './attrTable.vue'
+import Export from './export.vue'
+
+import saveIcon from '@iconify/icons-material-symbols/save'
+import deleteIcon from '@iconify/icons-material-symbols/delete'
+import refreshIcon from '@iconify/icons-material-symbols/refresh'
+import { Icon } from '@iconify/vue'
+import { Layout } from '@r/views/uds/layout'
+import { useDataStore } from '@r/stores/data'
+import { useProjectStore } from '@r/stores/project'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
+import { assign, cloneDeep } from 'lodash'
+import { VxeGrid, VxeGridProps } from 'vxe-table'
+import { CanDB } from 'nodeCan/can'
+import { useGlobalStart } from '@r/stores/runtime'
+import i18next from 'i18next'
+import { log } from 'electron-log'
+
+const layout = inject('layout') as Layout
+
+const props = defineProps<{
+  dbcFile?: string
+  editIndex: string
+  height: number
+  width: number
+}>()
+
+const overfiewRef = ref()
+
+const h = toRef(props, 'height')
+const w = toRef(props, 'width')
+const editableTabsValue = ref('Overview')
+provide('height', h)
+const database = useDataStore()
+const project = useProjectStore()
+
+const dbcObj = shallowRef<CanDB>() as ShallowRef<CanDB>
+
+function notifyDbcChange() {
+  triggerRef(dbcObj)
+}
+provide('notifyDbcChange', notifyDbcChange)
+
+const globalStart = useGlobalStart()
+
+const existed = computed(() => {
+  let existed = false
+  if (database.database && database.database.can) {
+    existed = database.database.can[props.editIndex] ? true : false
+  }
+  return existed
+})
+
+interface ValidateError {
+  message?: string
+  field?: string
+}
+
+type ValidateFieldsError = Record<string, ValidateError[]>
+interface ErrorItem {
+  tab: string
+  message?: string
+  field?: string
+}
+
+const errorList = ref<ErrorItem[]>([])
+
+const errorGridOptions = computed<VxeGridProps>(() => ({
+  border: true,
+  size: 'mini',
+  height: h.value - 400,
+  showOverflow: true,
+  columnConfig: { resizable: true },
+  rowConfig: {
+    isCurrent: true,
+    className: 'error-row'
+  },
+  columns: [
+    {
+      field: 'tab',
+      title: i18next.t('database.dbc.index.errorGrid.columns.tab'),
+      width: 120,
+      slots: { default: 'tab' }
+    },
+    {
+      field: 'field',
+      title: i18next.t('database.dbc.index.errorGrid.columns.field'),
+      minWidth: 200
+    },
+    {
+      field: 'message',
+      title: i18next.t('database.dbc.index.errorGrid.columns.errorMessage'),
+      slots: { default: 'message' },
+      minWidth: 200
+    }
+  ],
+  data: errorList.value
+}))
+
+async function valid() {
+  const list: Promise<void>[] = []
+
+  list.push(overfiewRef.value.validate())
+
+  const result = await Promise.allSettled(list)
+  errorList.value = []
+  for (const [index, r] of result.entries()) {
+    if (r.status == 'rejected') {
+      const errors = r.reason as {
+        tab: string
+        error: {
+          field: string
+          message: string
+        }[]
+      }
+
+      for (const [field, error] of Object.entries(errors.error)) {
+        errorList.value.push({
+          tab: errors.tab,
+          message: error.message,
+          field: error.field
+        })
+      }
+    }
+  }
+  if (errorList.value.length > 0) {
+    throw new Error(i18next.t('database.dbc.index.errors.invalid'))
+  }
+}
+
+function storeDbcFilePath(absoluteFile: string): string {
+  if (project.projectInfo.path) {
+    return window.path.relative(project.projectInfo.path, absoluteFile)
+  }
+  return absoluteFile
+}
+
+function resolveDbcFilePath(filePath?: string): string | undefined {
+  if (!filePath) return undefined
+  if (project.projectInfo.path && !window.path.isAbsolute(filePath)) {
+    return window.path.join(project.projectInfo.path, filePath)
+  }
+  return filePath
+}
+
+let skipDbcWatch = false
+
+async function applyParsedDatabase(file: string) {
+  const result = await window.electron.ipcRenderer.invoke('ipc-canmartix-parse', file)
+  result.data.version = 'canmartix'
+  result.data.filePath = storeDbcFilePath(file)
+  result.data.id = props.editIndex
+  result.data.name = dbcObj.value?.name || window.path.parse(file).name
+
+  skipDbcWatch = true
+  dbcObj.value = result.data
+  notifyDbcChange()
+  await valid()
+
+  if (existed.value) {
+    database.$patch(() => {
+      const db = markRaw(cloneDeep(dbcObj.value))
+      db.id = props.editIndex
+      database.database.can[props.editIndex] = db
+    })
+    layout.setWinModified(props.editIndex, false)
+    ElNotification({
+      offset: 50,
+      type: 'success',
+      message: i18next.t('database.dbc.index.messages.updateSuccess'),
+      appendTo: `#win${props.editIndex}`
+    })
+  } else {
+    layout.setWinModified(props.editIndex, true)
+    ElNotification({
+      offset: 50,
+      type: 'success',
+      message: i18next.t('database.dbc.index.messages.updateSuccessSaveRequired'),
+      appendTo: `#win${props.editIndex}`
+    })
+  }
+  skipDbcWatch = false
+}
+
+async function updateDatabaseFromFile() {
+  if (globalStart.value) return
+
+  const storedPath = dbcObj.value?.filePath
+  if (storedPath) {
+    const absolutePath = resolveDbcFilePath(storedPath)
+    if (absolutePath) {
+      const exists = await window.electron.ipcRenderer.invoke('ipc-fs-exist', absolutePath)
+      if (globalStart.value) return
+      if (exists) {
+        loading.value = true
+        try {
+          await applyParsedDatabase(absolutePath)
+        } catch (err: any) {
+          skipDbcWatch = false
+          log(err)
+          ElNotification({
+            offset: 50,
+            type: 'error',
+            title: i18next.t('database.dbc.index.errors.parseFailed'),
+            message: err?.message || String(err),
+            appendTo: `#win${props.editIndex}`
+          })
+        } finally {
+          loading.value = false
+        }
+        return
+      }
+      ElNotification({
+        offset: 50,
+        type: 'warning',
+        message: i18next.t('database.dbc.index.messages.fileNotFound', { path: absolutePath }),
+        appendTo: `#win${props.editIndex}`
+      })
+    }
+  }
+
+  if (globalStart.value) return
+
+  const r = await window.electron.ipcRenderer.invoke('ipc-show-open-dialog', {
+    title: i18next.t('database.dbc.index.updateConfirm.title'),
+    defaultPath: resolveDbcFilePath(storedPath),
+    properties: ['openFile'],
+    filters: [
+      {
+        name: i18next.t('database.fileFilterName'),
+        extensions: ['dbc', 'arxml']
+      }
+    ]
+  })
+  const file = r.filePaths[0]
+  if (!file || globalStart.value) return
+
+  loading.value = true
+  try {
+    await applyParsedDatabase(file)
+  } catch (err: any) {
+    skipDbcWatch = false
+    log(err)
+    ElNotification({
+      offset: 50,
+      type: 'error',
+      title: i18next.t('database.dbc.index.errors.parseFailed'),
+      message: err?.message || String(err),
+      appendTo: `#win${props.editIndex}`
+    })
+  } finally {
+    loading.value = false
+  }
+}
+
+function deleteDatabase() {
+  ElMessageBox.confirm(
+    i18next.t('database.dbc.index.deleteConfirm.message'),
+    i18next.t('database.dbc.index.deleteConfirm.title'),
+    {
+      confirmButtonText: i18next.t('database.dbc.index.deleteConfirm.ok'),
+      cancelButtonText: i18next.t('database.dbc.index.deleteConfirm.cancel'),
+      buttonSize: 'small',
+      appendTo: `#win${props.editIndex}`,
+      type: 'warning'
+    }
+  )
+    .then(() => {
+      database.$patch(() => {
+        delete database.database.can[props.editIndex]
+      })
+      layout.removeWin(props.editIndex, true)
+    })
+    .catch(null)
+}
+function saveDataBase() {
+  // Check for duplicate database name
+  const isDuplicateName = Object.entries(database.database.can).some(([key, db]) => {
+    // Skip comparing with itself
+    if (key === props.editIndex) return false
+    return db.name === dbcObj.value.name
+  })
+
+  if (isDuplicateName) {
+    ElNotification({
+      offset: 50,
+      type: 'error',
+      message: i18next.t('database.dbc.index.errors.duplicateDatabaseName', {
+        name: dbcObj.value.name
+      }),
+      appendTo: `#win${props.editIndex}`
+    })
+    return
+  }
+
+  valid()
+    .then(() => {
+      database.$patch(() => {
+        const db = markRaw(cloneDeep(dbcObj.value))
+        db.id = props.editIndex
+        if (db.filePath) {
+          const resolved = resolveDbcFilePath(db.filePath)
+          if (resolved) {
+            db.filePath = storeDbcFilePath(resolved)
+          }
+        }
+        database.database.can[props.editIndex] = db
+      })
+      layout.changeWinName(props.editIndex, dbcObj.value.name)
+      layout.setWinModified(props.editIndex, false)
+
+      ElNotification({
+        offset: 50,
+        type: 'success',
+        message: i18next.t('database.dbc.index.messages.saveSuccess'),
+        appendTo: `#win${props.editIndex}`
+      })
+    })
+    .catch(null)
+}
+function handleTabSwitch(tabName: string) {
+  editableTabsValue.value = tabName
+}
+
+let timeout
+watch(dbcObj, () => {
+  if (skipDbcWatch) return
+  layout.setWinModified(props.editIndex, true)
+  clearTimeout(timeout)
+  timeout = setTimeout(() => {
+    valid().catch(null)
+  }, 500)
+})
+
+const loading = ref(true)
+
+onMounted(() => {
+  // Add your onMounted logic here
+  if (!existed.value && props.dbcFile) {
+    loading.value = true
+    window.electron.ipcRenderer
+      .invoke('ipc-canmartix-parse', props.dbcFile)
+      .then((result) => {
+        result.data.version = 'canmartix'
+        result.data.filePath = storeDbcFilePath(props.dbcFile!)
+        result.data.id = props.editIndex
+        dbcObj.value = result.data
+        dbcObj.value.name = window.path.parse(props.dbcFile!).name
+        loading.value = false
+      })
+      .catch((err) => {
+        log(err)
+        ElMessageBox.alert(
+          i18next.t('database.dbc.index.errors.parseFailed'),
+          i18next.t('database.dbc.index.errors.error'),
+          {
+            confirmButtonText: i18next.t('database.dbc.index.deleteConfirm.ok'),
+            type: 'error',
+            buttonSize: 'small',
+            appendTo: `#win${props.editIndex}`,
+            message: err.message
+          }
+        )
+
+          .catch(null)
+          .finally(() => {
+            loading.value = false
+            layout.removeWin(props.editIndex, true)
+          })
+      })
+  } else {
+    dbcObj.value = cloneDeep(database.database.can[props.editIndex])
+    loading.value = false
+    nextTick(() => {
+      layout.setWinModified(props.editIndex, false)
+    })
+  }
+})
+</script>
+
+<style lang="scss">
+.dbcTabs {
+  margin-right: 5px;
+
+  .el-tabs__header {
+    margin-bottom: 0px !important;
+  }
+  .el-tabs__new-tab {
+    width: 90px !important;
+    cursor: default !important;
+  }
+}
+
+.error-section {
+  padding: 0 20px;
+}
+
+.error-type {
+  color: var(--el-color-danger);
+  font-weight: bold;
+}
+
+:deep(.error-cell) {
+  cursor: pointer;
+}
+
+:deep(.error-row:hover) {
+  background-color: var(--el-color-danger-light-9);
+}
+
+:deep(.error-highlight) {
+  animation: highlightError 2s ease-in-out;
+}
+
+@keyframes highlightError {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+
+  50% {
+    background-color: var(--el-color-danger-light-8);
+  }
+}
+</style>

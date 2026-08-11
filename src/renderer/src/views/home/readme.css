@@ -1,0 +1,187 @@
+#readme h1 {
+  counter-reset: h2;
+  font-size: 2em;
+  line-height: 1.2;
+  margin-top: 5px;
+  margin-bottom: 15px;
+}
+
+#readme h2 {
+  counter-reset: h3;
+  font-size: 1.75em;
+  margin-top: 5px;
+  margin-bottom: 10px;
+}
+
+#readme h3 {
+  counter-reset: h4;
+  font-size: 1.5em;
+}
+
+#readme h4 {
+  counter-reset: h5;
+}
+
+#readme h5 {
+  counter-reset: h6;
+}
+
+#readme h2:before {
+  counter-increment: h2;
+}
+
+#readme h3:before {
+  counter-increment: h3;
+}
+
+#readme h4:before {
+  counter-increment: h4;
+}
+
+#readme .heading-highlight {
+  background-color: var(--el-fill-color-light);
+}
+
+#readme blockquote {
+  border-left: 4px solid var(--el-color-info);
+  padding: 0 15px;
+  color: var(--el-text-color-secondary);
+  margin-left: 0px;
+  margin-right: 0px;
+}
+
+#readme li {
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+#readme table {
+  padding: 0;
+  word-break: initial;
+}
+#readme table tr {
+  border: 1px solid var(--el-border-color);
+  margin: 0;
+  padding: 0;
+}
+#readme table tr:nth-child(2n) {
+  background-color: var(--el-color-info-light-7);
+}
+#readme table thead {
+  background-color: var(--el-color-primary-light-9);
+}
+#readme table th {
+  font-weight: bold;
+  border: 0.5px solid #dfe2e5;
+  border-bottom: 0;
+  margin: 0;
+  padding: 6px 13px;
+}
+#readme table td {
+  border: 0.5px solid #dfe2e5;
+  margin: 0;
+  padding: 6px 13px;
+}
+
+#readme pre {
+  background-color: var(--el-color-info-light-9);
+  border-radius: 3px;
+  padding: 10px;
+  font-size: 0.95em;
+  white-space: pre; /* 保留换行符，不添加额外间隔 */
+  overflow-x: auto; /* 添加水平滚动条以适应长行 */
+}
+
+#readme code {
+  font-size: 0.95em;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
+    'Helvetica Neue', sans-serif;
+  border-radius: 3px;
+  background-color: var(--el-color-info-light-9);
+  padding: 2px 4px;
+}
+
+#readme pre code {
+  font-size: 1em;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
+    'Helvetica Neue', sans-serif;
+  background-color: var(--el-color-info-light-9);
+}
+
+#readme table th:first-child,
+table td:first-child {
+  margin-top: 0;
+}
+
+#readme table th:last-child,
+table td:last-child {
+  margin-bottom: 0;
+}
+
+#readme table {
+  margin: 0.8em 0;
+  border-spacing: 0px;
+  width: 100%;
+}
+
+#readme {
+  flex: 1;
+  counter-reset: h1;
+  margin-left: 15px;
+  color: var(--el-text-color);
+}
+
+#readme::-webkit-scrollbar {
+  display: none;
+}
+
+#readme-toc {
+  padding-left: 5px;
+  padding-top: 10px;
+  /* height: calc(100%-10px); */ /* hight is calc by ExampleProject.vue */
+  right: 0px;
+  width: 250px;
+  box-shadow: -15px 5px 10px rgba(0, 0, 0, 0.01);
+}
+
+#readme-toc li::marker {
+  color: transparent;
+}
+
+#readme-toc li {
+  color: var(--el-text-color-secondary);
+  font-size: smaller;
+  list-style-type: none;
+  margin-left: 5px;
+  margin-top: 5px;
+  white-space: nowrap; /* 防止文字换行 */
+  overflow: hidden; /* 隐藏溢出的部分 */
+  text-overflow: ellipsis; /* 显示省略号 */
+}
+
+#readme-toc ul {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  padding-left: 20px;
+}
+
+#readme-toc li.level1 {
+  color: var(--el-text-color-regular);
+  font-size: medium;
+  font-weight: bold;
+}
+
+/* Use this to fix the katex dialog bug */
+div.el-overlay.dialog-father > .el-overlay-dialog {
+  overflow: hidden;
+}
+
+#readme img {
+  max-width: 600px; /* Limit the maximum width of the image */
+  max-height: 400px; /* Limit the maximum height of the image */
+  display: block; /* Ensure the image is treated as a block element */
+  margin: 0 auto;
+}
+

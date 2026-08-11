@@ -1,0 +1,65 @@
+{
+  "service": {
+    "name": "RequestDownloadBin",
+    "fixedParam": true,
+    "buildInScript": "index.js",
+    "hasSubFunction": false,
+    "desc": "Combines services 0x34, 0x36(N), and 0x37 into one group. Only supports bin files with memory size matching file length",
+    "defaultParams": [
+      {
+        "param": {
+          "id": "dataFormatIdentifier",
+          "name": "dataFormatIdentifier",
+          "bitLen": 8,
+          "deletable": false,
+          "editable": true,
+          "type": "NUM",
+          "phyValue": "00"
+        }
+      },
+      {
+        "param": {
+          "id": "addressAndLengthFormatIdentifier",
+          "name": "addressAndLengthFormatIdentifier",
+          "bitLen": 8,
+          "deletable": false,
+          "editable": true,
+          "type": "NUM",
+          "phyValue": "0x44",
+          "value": {
+            "type":"Buffer",
+            "data":[68]
+          }
+        }
+      },
+      {
+        "param": {
+          "id": "memoryAddress",
+          "name": "memoryAddress",
+          "bitLen": 32,
+          "deletable": false,
+          "editable": true,
+          "type": "NUM",
+          "phyValue": "00",
+          "value": {
+            "type":"Buffer",
+            "data":[0,0,0,0]
+          }
+        }
+      },
+      {
+        "param": {
+          "id": "binFile",
+          "name": "binFile",
+          "bitLen": 0,
+          "deletable": false,
+          "editable": true,
+          "type": "FILE",
+          "phyValue": ""
+        }
+      }
+    ],
+    "defaultRespParams": []
+  }
+}
+

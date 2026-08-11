@@ -1,0 +1,244 @@
+{
+  "data": {
+    "devices": {
+      "7a286ad9-48b5-4175-9979-d3a13ba6a3c5": {
+        "type": "eth",
+        "ethDevice": {
+          "device": {
+            "label": "",
+            "handle": "192.168.6.63",
+            "id": "",
+            "detail": {
+              "address": "192.168.6.63",
+              "netmask": "255.255.255.0",
+              "family": "IPv4",
+              "mac": "6c:1f:f7:1c:53:25",
+              "internal": false,
+              "cidr": "192.168.6.63/24"
+            }
+          },
+          "name": "SIMULATE_0",
+          "id": "7a286ad9-48b5-4175-9979-d3a13ba6a3c5",
+          "vendor": "simulate"
+        }
+      },
+      "721ea2b9-12cd-494a-b448-e3514fb0d96d": {
+        "type": "someip",
+        "someipDevice": {
+          "id": "721ea2b9-12cd-494a-b448-e3514fb0d96d",
+          "name": "SomeIP_0",
+          "services": [
+            {
+              "service": "0x1111",
+              "instance": "0x2222",
+              "events": [],
+              "eventgroups": [],
+              "unreliable": 30509
+            }
+          ],
+          "device": "7a286ad9-48b5-4175-9979-d3a13ba6a3c5",
+          "application": {
+            "id": "0x6301",
+            "max_dispatchers": 10,
+            "max_dispatch_time": 100,
+            "max_detached_thread_wait_time": 5,
+            "threads": 2,
+            "io_thread_nice": 0,
+            "has_session_handling": true
+          },
+          "serviceDiscovery": {
+            "enable": true,
+            "multicast": "224.224.224.245",
+            "port": 30490,
+            "protocol": "udp",
+            "initial_delay_min": 10,
+            "initial_delay_max": 100,
+            "repetitions_base_delay": 200,
+            "repetitions_max": 3,
+            "ttl": "3",
+            "cyclic_offer_delay": 1000,
+            "request_response_delay": 2000
+          }
+        }
+      }
+    },
+    "ia": {
+      "802c5740-920c-487f-9cab-6f85483e091e": {
+        "name": "SomeIP IA",
+        "type": "someip",
+        "id": "802c5740-920c-487f-9cab-6f85483e091e",
+        "devices": [
+          "721ea2b9-12cd-494a-b448-e3514fb0d96d"
+        ],
+        "action": [
+          {
+            "trigger": {
+              "type": "manual"
+            },
+            "name": "",
+            "messageType": 0,
+            "serviceId": "0x1234",
+            "instanceId": "0x5678",
+            "methodId": "0x0421",
+            "channel": "721ea2b9-12cd-494a-b448-e3514fb0d96d",
+            "params": [
+              {
+                "id": "959689b6-efcd-4f2c-9e1a-ed591a55d03a",
+                "name": "param1",
+                "desc": "",
+                "phyValue": "hello",
+                "value": {
+                  "type": "Buffer",
+                  "data": [
+                    104,
+                    101,
+                    108,
+                    108,
+                    111
+                  ]
+                },
+                "bitLen": 40,
+                "type": "ASCII",
+                "deletable": true,
+                "editable": true
+              }
+            ],
+            "respParams": [],
+            "_X_ROW_KEY": "row_26",
+            "protocolVersion": "",
+            "interfaceVersion": "",
+            "someipOp": "send",
+            "eventGroupId": "0x0001",
+            "someipEventType": 2
+          },
+          {
+            "trigger": {
+              "type": "manual"
+            },
+            "name": "",
+            "messageType": 0,
+            "serviceId": "0x1234",
+            "instanceId": "0x5678",
+            "methodId": "0x8778",
+            "channel": "721ea2b9-12cd-494a-b448-e3514fb0d96d",
+            "params": [
+              {
+                "id": "959689b6-efcd-4f2c-9e1a-ed591a55d03a",
+                "name": "param1",
+                "desc": "",
+                "phyValue": "hello",
+                "value": {
+                  "type": "Buffer",
+                  "data": [
+                    104,
+                    101,
+                    108,
+                    108,
+                    111
+                  ]
+                },
+                "bitLen": 40,
+                "type": "ASCII",
+                "deletable": true,
+                "editable": true
+              }
+            ],
+            "respParams": [],
+            "protocolVersion": "",
+            "interfaceVersion": "",
+            "someipOp": "subscribe",
+            "eventGroupId": "0x4465",
+            "someipEventType": 0,
+            "_X_ROW_KEY": "row_18"
+          }
+        ]
+      }
+    },
+    "tester": {},
+    "subFunction": {},
+    "nodes": {},
+    "database": {
+      "lin": {},
+      "can": {},
+      "orti": {}
+    },
+    "graphs": {},
+    "guages": {},
+    "vars": {},
+    "datas": {},
+    "panels": {},
+    "logs": {},
+    "traces": {},
+    "pluginData": {},
+    "replays": {}
+  },
+  "project": {
+    "wins": {
+      "message": {
+        "pos": {
+          "x": 383,
+          "y": 219,
+          "w": 1280,
+          "h": 200
+        },
+        "options": {
+          "params": {}
+        },
+        "title": "message",
+        "label": "Message",
+        "id": "message",
+        "layoutType": "bottom"
+      },
+      "soa": {
+        "pos": {
+          "x": 3,
+          "y": 0,
+          "w": 1220,
+          "h": 617
+        },
+        "title": "soa",
+        "label": "SOA",
+        "id": "soa",
+        "options": {},
+        "hide": false
+      },
+      "802c5740-920c-487f-9cab-6f85483e091e_ia": {
+        "pos": {
+          "x": 494,
+          "y": 0,
+          "w": 1162,
+          "h": 400
+        },
+        "title": "someipi",
+        "label": "IA",
+        "id": "802c5740-920c-487f-9cab-6f85483e091e_ia",
+        "options": {
+          "params": {
+            "edit-index": "802c5740-920c-487f-9cab-6f85483e091e"
+          },
+          "name": "SomeIP IA"
+        }
+      },
+      "trace": {
+        "pos": {
+          "x": 54.5,
+          "y": 186,
+          "w": 1562,
+          "h": 400
+        },
+        "title": "trace",
+        "label": "Trace",
+        "id": "trace",
+        "options": {
+          "params": {
+            "edit-index": "trace"
+          },
+          "name": "Trace"
+        }
+      }
+    },
+    "example": {
+      "catalog": "SOME/IP"
+    }
+  }
+}
