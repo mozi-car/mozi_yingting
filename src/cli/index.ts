@@ -278,7 +278,7 @@ function createLog(level: string, file?: string) {
   createLogs(t, f)
 }
 
-program.version(version).description('yingting command line tool')
+program.version(version).description('mozi yingting command line tool')
 
 // createCliLogs
 const seq = program.command('seq').description('run uds sequence')

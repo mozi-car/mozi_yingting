@@ -1,7 +1,7 @@
 /**
  * 婴听 CLI 构建脚本 (esbuild)
  * - 与 build-sidecar 同构：alias electron -> shim，全量打包依赖
- * - 输出 out/cli/ecb_cli.cjs（与 EcuBus-Pro cli/out/ecb_cli.js 对齐）
+ * - 输出 out/cli/myt.cjs（与 EcuBus-Pro cli/out/ecb_cli.js 对齐）
  */
 import esbuild from 'esbuild'
 import path from 'path'
@@ -84,7 +84,7 @@ await esbuild.build({
   platform: 'node',
   format: 'cjs',
   target: 'node22',
-  outfile: path.join(root, 'out/cli/ecb_cli.cjs'),
+  outfile: path.join(root, 'out/cli/myt.cjs'),
   sourcemap: true,
   banner: { js: '#!/usr/bin/env node' },
   external: ['electron-updater', '@serialport/bindings-cpp'],
@@ -112,5 +112,9 @@ for (const dep of ['ms', 'debug', 'node-gyp-build']) {
   fs.cpSync(path.join(root, 'node_modules', dep), path.join(nmDst, dep), { recursive: true })
 }
 
-fs.chmodSync(path.join(root, 'out/cli/ecb_cli.cjs'), 0o755)
-console.log('[cli] built -> out/cli/ecb_cli.cjs')
+// 部署到 resources/lib/myt（随 resources 打包，sidecar pnpm 等调用）
+const deployPath = path.join(root, 'resources/lib/myt')
+fs.copyFileSync(path.join(root, 'out/cli/myt.cjs'), deployPath)
+fs.chmodSync(deployPath, 0o755)
+
+console.log('[cli] built -> out/cli/myt.cjs -> resources/lib/myt')

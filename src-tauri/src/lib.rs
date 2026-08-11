@@ -18,6 +18,7 @@ pub fn run() {
             bridge::register(app);
             Ok(())
         })
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![bridge::rpc_invoke, bridge::rpc_emit, app_info])
         .build(tauri::generate_context!())
         .expect("error while building yingting")

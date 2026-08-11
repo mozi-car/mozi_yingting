@@ -372,7 +372,7 @@ interface ImportItem {
 }
 
 const importDialogVisible = ref(false)
-const importKind = ref<'ecb' | 'odx' | 'cdd' | null>(null)
+const importKind = ref<'mytproject' | 'odx' | 'cdd' | null>(null)
 const importDialogTitle = ref('Import Tester')
 const importItems = ref<ImportItem[]>([])
 const importSelected = ref<string[]>([])
@@ -405,7 +405,7 @@ async function importFromEcb() {
     title: 'Import Tester from ECB',
     properties: ['openFile'],
     filters: [
-      { name: 'yingting', extensions: ['ecb'] },
+      { name: 'yingting', extensions: ['mytproject'] },
       { name: 'All Files', extensions: ['*'] }
     ]
   })
@@ -436,7 +436,7 @@ async function importFromEcb() {
       return
     }
 
-    importDialogTitle.value = 'Import from ECB'
+    importDialogTitle.value = 'Import from yingting'
     importKind.value = 'ecb'
     importItems.value = items
     importSelected.value = items.map((i) => i.id)

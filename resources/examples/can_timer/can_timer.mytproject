@@ -1,0 +1,579 @@
+{
+  "data": {
+    "devices": {
+      "030b067c-a10c-464e-b54f-d442b525becc": {
+        "type": "can",
+        "canDevice": {
+          "id": "030b067c-a10c-464e-b54f-d442b525becc",
+          "name": "KVASER_0",
+          "handle": 0,
+          "vendor": "kvaser",
+          "canfd": true,
+          "database": "",
+          "bitrate": {
+            "sjw": 1,
+            "timeSeg1": 13,
+            "timeSeg2": 2,
+            "preScaler": 10,
+            "freq": 500000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_16"
+          },
+          "bitratefd": {
+            "sjw": 1,
+            "timeSeg1": 7,
+            "timeSeg2": 2,
+            "preScaler": 4,
+            "freq": 2000000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_41"
+          }
+        }
+      },
+      "eb8321b1-b3a4-43bc-a363-af51c21a2eb9": {
+        "type": "can",
+        "canDevice": {
+          "id": "eb8321b1-b3a4-43bc-a363-af51c21a2eb9",
+          "name": "KVASER_1",
+          "handle": 1,
+          "vendor": "kvaser",
+          "canfd": true,
+          "database": "",
+          "bitrate": {
+            "sjw": 1,
+            "timeSeg1": 13,
+            "timeSeg2": 2,
+            "preScaler": 10,
+            "freq": 500000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_55"
+          },
+          "bitratefd": {
+            "sjw": 1,
+            "timeSeg1": 7,
+            "timeSeg2": 2,
+            "preScaler": 4,
+            "freq": 2000000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_80"
+          }
+        }
+      },
+      "081e964f-c8f8-4fa4-af2b-7c3cd06a9ad9": {
+        "type": "can",
+        "canDevice": {
+          "id": "081e964f-c8f8-4fa4-af2b-7c3cd06a9ad9",
+          "name": "VECTOR_2",
+          "handle": "0:0",
+          "vendor": "vector",
+          "canfd": true,
+          "database": "",
+          "bitrate": {
+            "sjw": 1,
+            "timeSeg1": 13,
+            "timeSeg2": 2,
+            "preScaler": 10,
+            "freq": 500000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_53"
+          },
+          "bitratefd": {
+            "sjw": 1,
+            "timeSeg1": 7,
+            "timeSeg2": 2,
+            "preScaler": 4,
+            "freq": 2000000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_78"
+          }
+        }
+      },
+      "4b8d1891-a9d3-467b-8e3f-1fb530ed59ef": {
+        "type": "can",
+        "canDevice": {
+          "id": "4b8d1891-a9d3-467b-8e3f-1fb530ed59ef",
+          "name": "VECTOR_3",
+          "handle": "1:1",
+          "vendor": "vector",
+          "canfd": true,
+          "database": "",
+          "bitrate": {
+            "sjw": 1,
+            "timeSeg1": 27,
+            "timeSeg2": 4,
+            "preScaler": 5,
+            "freq": 500000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_127"
+          },
+          "bitratefd": {
+            "sjw": 1,
+            "timeSeg1": 7,
+            "timeSeg2": 2,
+            "preScaler": 4,
+            "freq": 2000000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_152"
+          }
+        }
+      },
+      "3e1623f4-0437-4676-a0bc-f5c6a8f7e668": {
+        "type": "can",
+        "canDevice": {
+          "id": "3e1623f4-0437-4676-a0bc-f5c6a8f7e668",
+          "name": "PEAK_4",
+          "handle": 81,
+          "vendor": "peak",
+          "canfd": true,
+          "database": "",
+          "bitrate": {
+            "sjw": 1,
+            "timeSeg1": 13,
+            "timeSeg2": 2,
+            "preScaler": 10,
+            "freq": 500000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_19"
+          },
+          "bitratefd": {
+            "sjw": 1,
+            "timeSeg1": 7,
+            "timeSeg2": 2,
+            "preScaler": 4,
+            "freq": 2000000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_44"
+          }
+        }
+      },
+      "2351ba8d-6b5e-4855-876c-153bcd7bff24": {
+        "type": "can",
+        "canDevice": {
+          "id": "2351ba8d-6b5e-4855-876c-153bcd7bff24",
+          "name": "PEAK_5",
+          "handle": 82,
+          "vendor": "peak",
+          "canfd": true,
+          "database": "",
+          "bitrate": {
+            "sjw": 1,
+            "timeSeg1": 13,
+            "timeSeg2": 2,
+            "preScaler": 10,
+            "freq": 500000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_58"
+          },
+          "bitratefd": {
+            "sjw": 1,
+            "timeSeg1": 7,
+            "timeSeg2": 2,
+            "preScaler": 4,
+            "freq": 2000000,
+            "clock": "80",
+            "_X_ROW_KEY": "row_83"
+          }
+        }
+      }
+    },
+    "ia": {
+      "c24115ee-7080-4573-a216-af88cea85085": {
+        "name": "Can IA",
+        "type": "can",
+        "id": "c24115ee-7080-4573-a216-af88cea85085",
+        "devices": [
+          "030b067c-a10c-464e-b54f-d442b525becc",
+          "081e964f-c8f8-4fa4-af2b-7c3cd06a9ad9",
+          "3e1623f4-0437-4676-a0bc-f5c6a8f7e668"
+        ],
+        "action": [
+          {
+            "trigger": {
+              "type": "periodic",
+              "period": 10
+            },
+            "name": "10ms-1",
+            "id": "1",
+            "channel": "3e1623f4-0437-4676-a0bc-f5c6a8f7e668",
+            "type": "canfd",
+            "dlc": 15,
+            "data": [
+              "11",
+              "22",
+              "33",
+              "44",
+              "55",
+              "66",
+              "77",
+              "88"
+            ],
+            "_X_ROW_KEY": "row_24",
+            "brs": true,
+            "uuid": "row_16"
+          },
+          {
+            "uuid": "36a07124-b132-495c-811a-00374d1e2a17",
+            "trigger": {
+              "type": "periodic",
+              "period": 10
+            },
+            "name": "10ms-2",
+            "id": "2",
+            "channel": "3e1623f4-0437-4676-a0bc-f5c6a8f7e668",
+            "type": "can",
+            "dlc": 8,
+            "data": [
+              "11",
+              "22",
+              "33"
+            ]
+          },
+          {
+            "uuid": "079f4bc7-dd62-4eec-a12e-8e6ca51f5b7c",
+            "trigger": {
+              "type": "periodic",
+              "period": 10
+            },
+            "name": "10ms-3",
+            "id": "3",
+            "channel": "3e1623f4-0437-4676-a0bc-f5c6a8f7e668",
+            "type": "can",
+            "dlc": 8,
+            "data": []
+          },
+          {
+            "uuid": "09923f55-059a-4ae8-b6b1-274f5df3c6cf",
+            "trigger": {
+              "type": "periodic",
+              "period": 10
+            },
+            "name": "10ms-4",
+            "id": "4",
+            "channel": "3e1623f4-0437-4676-a0bc-f5c6a8f7e668",
+            "type": "can",
+            "dlc": 8,
+            "data": []
+          }
+        ]
+      }
+    },
+    "tester": {},
+    "subFunction": {},
+    "nodes": {
+      "a788d03f-f4d2-4294-a2fe-2fc86cecd1ce": {
+        "name": "Node 1",
+        "id": "a788d03f-f4d2-4294-a2fe-2fc86cecd1ce",
+        "channel": [
+          "030b067c-a10c-464e-b54f-d442b525becc",
+          "081e964f-c8f8-4fa4-af2b-7c3cd06a9ad9",
+          "3e1623f4-0437-4676-a0bc-f5c6a8f7e668"
+        ],
+        "workNode": "",
+        "script": "ecu.ts"
+      }
+    },
+    "database": {
+      "lin": {},
+      "can": {},
+      "orti": {}
+    },
+    "graphs": {
+      "4d8399e2-5b51-46f5-9e30-546568335847": {
+        "type": "variable",
+        "enable": true,
+        "id": "4d8399e2-5b51-46f5-9e30-546568335847",
+        "name": "DIFF1",
+        "color": "#68aff0",
+        "yAxis": {
+          "min": 7.908940287999999,
+          "max": 12.091059711999998,
+          "unit": "ms"
+        },
+        "bindValue": {
+          "variableId": "4d8399e2-5b51-46f5-9e30-546568335847",
+          "variableType": "user",
+          "variableName": "DIFF1",
+          "variableFullName": "DIFF1",
+          "variableValueType": "number"
+        },
+        "graph": {
+          "id": "graph"
+        }
+      },
+      "dcc5d8bf-fe22-4055-a52d-706bf16df049": {
+        "type": "variable",
+        "enable": true,
+        "id": "dcc5d8bf-fe22-4055-a52d-706bf16df049",
+        "name": "DIFF2",
+        "color": "#7541d0",
+        "yAxis": {
+          "min": 5,
+          "max": 15
+        },
+        "bindValue": {
+          "variableId": "dcc5d8bf-fe22-4055-a52d-706bf16df049",
+          "variableType": "user",
+          "variableName": "DIFF2",
+          "variableFullName": "DIFF2",
+          "variableValueType": "number"
+        },
+        "graph": {
+          "id": "graph"
+        }
+      },
+      "ef803f48-577d-4c24-b771-311eb30b3e93": {
+        "type": "variable",
+        "enable": true,
+        "id": "ef803f48-577d-4c24-b771-311eb30b3e93",
+        "name": "DIFF3",
+        "color": "#3c0158",
+        "yAxis": {
+          "min": 5,
+          "max": 15
+        },
+        "bindValue": {
+          "variableId": "ef803f48-577d-4c24-b771-311eb30b3e93",
+          "variableType": "user",
+          "variableName": "DIFF3",
+          "variableFullName": "DIFF3",
+          "variableValueType": "number"
+        },
+        "graph": {
+          "id": "graph"
+        }
+      },
+      "a0cd7fb9-f286-49b5-b2ee-0a027f489c53": {
+        "type": "variable",
+        "enable": true,
+        "id": "a0cd7fb9-f286-49b5-b2ee-0a027f489c53",
+        "name": "DIFF4",
+        "color": "#f11cba",
+        "yAxis": {
+          "min": 5,
+          "max": 15
+        },
+        "bindValue": {
+          "variableId": "a0cd7fb9-f286-49b5-b2ee-0a027f489c53",
+          "variableType": "user",
+          "variableName": "DIFF4",
+          "variableFullName": "DIFF4",
+          "variableValueType": "number"
+        },
+        "graph": {
+          "id": "graph"
+        }
+      }
+    },
+    "guages": {
+      "Statistics.030b067c-a10c-464e-b54f-d442b525becc.BusLoad": {
+        "type": "variable",
+        "enable": true,
+        "id": "Statistics.030b067c-a10c-464e-b54f-d442b525becc.BusLoad",
+        "name": "BusLoad",
+        "color": "#daff25",
+        "yAxis": {
+          "min": 0,
+          "max": 100,
+          "unit": "%"
+        },
+        "bindValue": {
+          "variableId": "Statistics.030b067c-a10c-464e-b54f-d442b525becc.BusLoad",
+          "variableType": "system",
+          "variableName": "BusLoad",
+          "variableFullName": "Statistics.KVASER_0.BusLoad"
+        },
+        "graph": {
+          "id": "gauge"
+        }
+      },
+      "Statistics.030b067c-a10c-464e-b54f-d442b525becc.FrameSentFreq": {
+        "type": "variable",
+        "enable": true,
+        "id": "Statistics.030b067c-a10c-464e-b54f-d442b525becc.FrameSentFreq",
+        "name": "FrameSentFreq",
+        "color": "#bd5d7e",
+        "yAxis": {
+          "min": 0,
+          "max": 100,
+          "unit": "f/s"
+        },
+        "bindValue": {
+          "variableId": "Statistics.030b067c-a10c-464e-b54f-d442b525becc.FrameSentFreq",
+          "variableType": "system",
+          "variableName": "FrameSentFreq",
+          "variableFullName": "Statistics.KVASER_0.FrameSentFreq"
+        },
+        "graph": {
+          "id": "gauge"
+        }
+      }
+    },
+    "vars": {
+      "4d8399e2-5b51-46f5-9e30-546568335847": {
+        "name": "DIFF1",
+        "desc": "",
+        "type": "user",
+        "value": {
+          "type": "number",
+          "initValue": 0,
+          "min": 5,
+          "max": 15,
+          "unit": "ms"
+        },
+        "id": "4d8399e2-5b51-46f5-9e30-546568335847"
+      },
+      "dcc5d8bf-fe22-4055-a52d-706bf16df049": {
+        "name": "DIFF2",
+        "desc": "",
+        "type": "user",
+        "value": {
+          "type": "number",
+          "initValue": 0,
+          "min": 5,
+          "max": 15
+        },
+        "id": "dcc5d8bf-fe22-4055-a52d-706bf16df049"
+      },
+      "ef803f48-577d-4c24-b771-311eb30b3e93": {
+        "name": "DIFF3",
+        "desc": "",
+        "type": "user",
+        "value": {
+          "type": "number",
+          "initValue": 0,
+          "min": 5,
+          "max": 15
+        },
+        "id": "ef803f48-577d-4c24-b771-311eb30b3e93"
+      },
+      "a0cd7fb9-f286-49b5-b2ee-0a027f489c53": {
+        "name": "DIFF4",
+        "desc": "",
+        "type": "user",
+        "value": {
+          "type": "number",
+          "initValue": "5",
+          "min": 5,
+          "max": 15
+        },
+        "id": "a0cd7fb9-f286-49b5-b2ee-0a027f489c53"
+      }
+    },
+    "datas": {},
+    "panels": {},
+    "logs": {},
+    "traces": {
+      "trace": {
+        "id": "",
+        "name": "Trace",
+        "filter": [
+          "canBase",
+          "ipBase",
+          "linBase",
+          "uds",
+          "someipBase",
+          "osTrace"
+        ],
+        "filterDevice": [],
+        "filterId": []
+      }
+    },
+    "pluginData": {}
+  },
+  "project": {
+    "wins": {
+      "message": {
+        "pos": {
+          "x": 383,
+          "y": 219,
+          "w": 2585,
+          "h": 275
+        },
+        "options": {
+          "params": {}
+        },
+        "title": "message",
+        "label": "Message",
+        "id": "message",
+        "layoutType": "bottom"
+      },
+      "network": {
+        "pos": {
+          "x": 1625,
+          "y": 0,
+          "w": 600,
+          "h": 400
+        },
+        "title": "network",
+        "label": "Network",
+        "id": "network",
+        "options": {}
+      },
+      "c24115ee-7080-4573-a216-af88cea85085_ia": {
+        "pos": {
+          "x": 195,
+          "y": 96,
+          "w": 1057,
+          "h": 400
+        },
+        "title": "cani",
+        "label": "IA",
+        "id": "c24115ee-7080-4573-a216-af88cea85085_ia",
+        "options": {
+          "params": {
+            "edit-index": "c24115ee-7080-4573-a216-af88cea85085"
+          },
+          "name": "Can IA"
+        }
+      },
+      "trace": {
+        "pos": {
+          "x": 713,
+          "y": 400,
+          "w": 1651,
+          "h": 530
+        },
+        "title": "trace",
+        "label": "Trace",
+        "id": "trace",
+        "options": {
+          "params": {
+            "edit-index": "trace"
+          },
+          "name": "Trace"
+        }
+      },
+      "graph": {
+        "pos": {
+          "x": 937,
+          "y": 16,
+          "w": 1070,
+          "h": 882
+        },
+        "title": "graph",
+        "label": "Line",
+        "id": "graph",
+        "options": {
+          "params": {
+            "edit-index": "graph"
+          }
+        }
+      },
+      "hardware": {
+        "pos": {
+          "x": 1058,
+          "y": 182,
+          "w": 1298,
+          "h": 400
+        },
+        "title": "hardware",
+        "label": "Devices",
+        "id": "hardware",
+        "options": {}
+      }
+    },
+    "example": {
+      "catalog": "CAN"
+    }
+  }
+}

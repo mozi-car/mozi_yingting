@@ -27,7 +27,7 @@ interface example {
 }
 
 ipcMain.handle('ipc-examples', async (event, ...args) => {
-  const ecbFile = await glob('*/*.ecb', { cwd: buildInExamplePath })
+  const ecbFile = await glob('*/*.mytproject', { cwd: buildInExamplePath })
   const examples: example[] = []
   for (const ecb of ecbFile) {
     const ecbPath = path.join(buildInExamplePath, ecb)

@@ -9,7 +9,7 @@ import dllFile from '../../../resources/lib/libusb-1.0.dll?asset&asarUnpack'
 
 const execAsync = promisify(exec)
 const dllPath = path.dirname(dllFile)
-const ecb_cli = path.join(dllPath, 'ecb_cli')
+const cli_bin = path.join(dllPath, 'myt')
 
 // 执行命令的工具函数
 async function execCommand(command: string, cwd: string) {
@@ -62,7 +62,7 @@ ipcMain.handle('ipc-pnpm-init', async (event, ...args) => {
     }
 
     // 执行 pnpm init 命令
-    await execCommand(`${ecb_cli} pnpm init -y`, projectPath)
+    await execCommand(`${cli_bin} pnpm init -y`, projectPath)
 
     // 读取生成的 package.json 并返回
     const packageJson = await fsP.readFile(packageJsonPath, 'utf-8')
@@ -81,7 +81,7 @@ ipcMain.handle('ipc-pnpm-install', async (event, ...args) => {
   }
 
   try {
-    const command = `${ecb_cli} pnpm add ${packageName}${isDev ? ' -D' : ''}`
+    const command = `${cli_bin} pnpm add ${packageName}${isDev ? ' -D' : ''}`
     await execCommand(command, projectPath)
 
     // 读取更新后的 package.json
@@ -101,7 +101,7 @@ ipcMain.handle('ipc-pnpm-uninstall', async (event, ...args) => {
   }
 
   try {
-    await execCommand(`${ecb_cli} pnpm remove ${packageName}`, projectPath)
+    await execCommand(`${cli_bin} pnpm remove ${packageName}`, projectPath)
 
     // 读取更新后的 package.json
     const packageJson = await fsP.readFile(path.join(projectPath, 'package.json'), 'utf-8')

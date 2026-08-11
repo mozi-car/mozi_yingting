@@ -184,7 +184,7 @@ export const useProjectStore = defineStore('project', {
         const r = await window.electron.ipcRenderer.invoke('ipc-show-open-dialog', {
           title: i18next.t('project.dialog.openTitle'),
           properties: ['openFile'],
-          filters: [{ name: 'yingting', extensions: ['ecb'] }]
+          filters: [{ name: 'yingting', extensions: ['mytproject'] }]
         })
         const file = r.filePaths[0]
         if (file == undefined) {
@@ -304,8 +304,8 @@ export const useProjectStore = defineStore('project', {
         if (this.projectInfo.path == '') {
           const res = await window.electron.ipcRenderer.invoke('ipc-show-save-dialog', {
             title: i18next.t('project.dialog.saveTitle'),
-            defaultPath: 'Config.ecb',
-            filters: [{ name: 'yingting', extensions: ['ecb'] }]
+            defaultPath: 'Config.mytproject',
+            filters: [{ name: 'yingting', extensions: ['mytproject'] }]
           })
           if (res.canceled || res.filePath == undefined) {
             return

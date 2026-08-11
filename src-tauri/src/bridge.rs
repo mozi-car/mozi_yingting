@@ -178,10 +178,90 @@ pub async fn rpc_invoke(
     channel: String,
     args: Value,
 ) -> Result<Value, String> {
+    // 原生对话框在 Rust 侧处理（sidecar 无 UI）
+    if let Some(v) = native_dialog(&bridge.app, &channel, &args) {
+        return Ok(v);
+    }
     let bridge = Arc::clone(&bridge);
     tauri::async_runtime::spawn_blocking(move || bridge.invoke(&channel, &args))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// 原生对话框（对齐 Electron dialog 返回结构）
+fn native_dialog(app: &tauri::AppHandle, channel: &str, args: &Value) -> Option<Value> {
+    use tauri_plugin_dialog::DialogExt;
+    match channel {
+        "ipc-show-open-dialog" => {
+            let props = args.get(0).and_then(|v| v.as_object());
+            let mut picker = app.dialog().file();
+            let mut multi = false;
+            if let Some(p) = props {
+                if let Some(pros) = p.get("properties").and_then(|v| v.as_array()) {
+                    multi = pros
+                        .iter()
+                        .any(|v| v.as_str() == Some("multiSelections"));
+                }
+                if let Some(title) = p.get("title").and_then(|v| v.as_str()) {
+                    picker = picker.set_title(title);
+                }
+                if let Some(filters) = p.get("filters").and_then(|v| v.as_array()) {
+                    if let Some(f) = filters.first().and_then(|v| v.as_object()) {
+                        if let Some(name) = f.get("name").and_then(|v| v.as_str()) {
+                            picker = picker.add_filter(name, &["*"]);
+                        }
+                    }
+                }
+            }
+            if multi {
+                let files = picker.blocking_pick_files();
+                Some(json!({ "canceled": files.is_none(), "filePaths": files.unwrap_or_default().iter().map(|f| f.clone().into_path().map(|p| p.display().to_string()).unwrap_or_default()).collect::<Vec<_>>() }))
+            } else {
+                let file = picker.blocking_pick_file();
+                Some(json!({ "canceled": file.is_none(), "filePaths": vec![file.map(|f| f.into_path().map(|p| p.display().to_string()).unwrap_or_default()).unwrap_or_default()] }))
+            }
+        }
+        "ipc-show-save-dialog" => {
+            let props = args.get(0).and_then(|v| v.as_object());
+            let mut picker = app.dialog().file();
+            if let Some(p) = props {
+                if let Some(title) = p.get("title").and_then(|v| v.as_str()) {
+                    picker = picker.set_title(title);
+                }
+                if let Some(dp) = p.get("defaultPath").and_then(|v| v.as_str()) {
+                    picker = picker.set_file_name(dp);
+                }
+                if let Some(filters) = p.get("filters").and_then(|v| v.as_array()) {
+                    if let Some(f) = filters.first().and_then(|v| v.as_object()) {
+                        if let Some(exts) = f.get("extensions").and_then(|v| v.as_array()) {
+                            let exts: Vec<&str> = exts.iter().filter_map(|v| v.as_str()).collect();
+                            let name = f
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("file");
+                            picker = picker.add_filter(name, &exts);
+                        }
+                    }
+                }
+            }
+            let file = picker.blocking_save_file();
+            Some(json!({ "canceled": file.is_none(), "filePath": file.map(|f| f.into_path().map(|p| p.display().to_string()).unwrap_or_default()) }))
+        }
+        "ipc-show-message-box" => {
+            let props = args.get(0).and_then(|v| v.as_object());
+            let title = props.and_then(|p| p.get("title").and_then(|v| v.as_str())).unwrap_or("yingting");
+            let message = props.and_then(|p| p.get("message").and_then(|v| v.as_str())).unwrap_or("").to_string();
+            let _ = app.dialog().message(message).title(title).blocking_show();
+            Some(json!({ "response": 1 }))
+        }
+        "icp-show-error-box" => {
+            let title = args.get(0).and_then(|v| v.as_str()).unwrap_or("Error").to_string();
+            let content = args.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let _ = app.dialog().message(content).title(title).blocking_show();
+            Some(json!({ "response": 1 }))
+        }
+        _ => None,
+    }
 }
 
 #[tauri::command]
