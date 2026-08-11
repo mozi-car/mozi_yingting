@@ -7,7 +7,7 @@
   "build": {
     "beforeDevCommand": "npm run build:sidecar && vite",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm run build:sidecar && npm run build:renderer",
+    "beforeBuildCommand": "npm run build:sidecar && npm run build:cli && npm run build:renderer",
     "frontendDist": "../dist"
   },
   "app": {

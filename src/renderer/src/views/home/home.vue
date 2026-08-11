@@ -61,67 +61,6 @@
                   </el-table>
                 </el-scrollbar>
               </div>
-
-              <!-- Advertisement Carousel -->
-              <el-divider content-position="left"
-                ><strong>{{ $t('home.advertisingPartnership') }}</strong></el-divider
-              >
-              <div class="ad-carousel-container">
-                <el-carousel
-                  height="150px"
-                  :interval="adCarouselInterval"
-                  indicator-position="outside"
-                  arrow="never"
-                  @change="onAdCarouselChange"
-                >
-                  <!-- AutoC Ad -->
-                  <el-carousel-item>
-                    <div class="ad-slot autoc" @click="openAdLink('autoc')">
-                      <div class="ad-image">
-                        <img :src="autocLogoUrl" alt="AutoC" />
-                      </div>
-                      <div class="ad-content">
-                        <div class="ad-title">AutoC</div>
-                        <div class="ad-description">
-                          AUTOSAR BSW AI assistant: natural-language config, validation, and
-                          iterative fixes in your project.
-                        </div>
-                        <div class="ad-cta">Learn More →</div>
-                      </div>
-                    </div>
-                  </el-carousel-item>
-                  <!-- LinCable Ad -->
-                  <el-carousel-item>
-                    <div class="ad-slot lincable" @click="openAdLink('lincable')">
-                      <div class="ad-image">
-                        <img :src="lincableImg" alt="LinCable" />
-                      </div>
-                      <div class="ad-content">
-                        <div class="ad-title">{{ $t('home.lincableTitle') }}</div>
-                        <div class="ad-description">
-                          {{ $t('home.lincableDescription') }}
-                        </div>
-                        <div class="ad-cta">{{ $t('home.learnMore') }}</div>
-                      </div>
-                    </div>
-                  </el-carousel-item>
-                  <!-- Partner Ad -->
-                  <el-carousel-item>
-                    <div class="ad-slot premium" @click="openAdLink('ad1')">
-                      <div class="ad-icon">
-                        <Icon :icon="starIcon" />
-                      </div>
-                      <div class="ad-content">
-                        <div class="ad-title">{{ $t('home.advertiseHere') }}</div>
-                        <div class="ad-description">
-                          {{ $t('home.advertiseDescription') }}
-                        </div>
-                        <div class="ad-cta">{{ $t('home.contactUs') }}</div>
-                      </div>
-                    </div>
-                  </el-carousel-item>
-                </el-carousel>
-              </div>
             </div>
           </div>
 
@@ -526,15 +465,12 @@ import starIcon from '@iconify/icons-material-symbols/star-outline'
 import heartIcon from '@iconify/icons-material-symbols/favorite-outline'
 import pluginIcon from '@iconify/icons-mdi/puzzle'
 import usbIcon from '@iconify/icons-mdi/usb'
-import lincableImg from '@r/assets/lincable.png'
 import PluginMarketplace from './PluginMarketplace.vue'
 import { usePluginStore } from '@r/stores/plugin'
 import i18next from 'i18next'
 
 // dayjs.extend(relativeTime);
 dayjs.extend(isSameOrAfter)
-const autocLogoUrl = 'https://www.autoc-tool.com/logo1.png'
-const adCarouselInterval = ref(12000)
 const hasUpdate = ref(false)
 const { width, height } = useWindowSize()
 const project = useProjectStore()
@@ -590,26 +526,6 @@ function openProject(p: any) {
 
 function openUm() {
   window.electron.ipcRenderer.send('ipc-open-um')
-}
-
-function onAdCarouselChange(index: number) {
-  adCarouselInterval.value = index === 0 ? 12000 : 5000
-}
-
-function openAdLink(adId: string) {
-  if (adId === 'autoc') {
-    window.electron.ipcRenderer.send('ipc-open-link', 'https://www.autoc-tool.com/')
-  } else if (adId === 'lincable') {
-    window.electron.ipcRenderer.send(
-      'ipc-open-link',
-      'https://app.whyengineer.com/docs/um/hardware/lincable.html'
-    )
-  } else if (adId === 'ad1') {
-    window.electron.ipcRenderer.send(
-      'ipc-open-link',
-      'https://app.whyengineer.com/docs/about/contact.html'
-    )
-  }
 }
 
 const versions = ref([
@@ -994,160 +910,4 @@ onMounted(() => {
   margin: 0 10px;
 }
 
-.ad-slots {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: 10px;
-}
-
-.ad-slot {
-  border: 2px solid transparent;
-  border-radius: 12px;
-  padding: 20px;
-  background: linear-gradient(
-    135deg,
-    var(--el-bg-color-overlay) 0%,
-    var(--el-color-info-light-9) 100%
-  );
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  min-height: 70px;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.ad-slot.premium {
-  border-color: var(--el-color-primary);
-  background: linear-gradient(
-    135deg,
-    var(--el-color-primary-light-9) 0%,
-    var(--el-color-primary-light-8) 100%
-  );
-}
-
-.ad-slot.sponsor {
-  border-color: var(--el-color-success);
-  background: linear-gradient(
-    135deg,
-    var(--el-color-success-light-9) 0%,
-    var(--el-color-success-light-8) 100%
-  );
-}
-
-.ad-icon {
-  font-size: 24px;
-  color: var(--el-color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.8);
-  flex-shrink: 0;
-}
-
-.ad-slot.sponsor .ad-icon {
-  color: var(--el-color-success);
-}
-
-.ad-content {
-  flex: 1;
-  text-align: left;
-}
-
-.ad-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--el-text-color-primary);
-  margin-bottom: 6px;
-  line-height: 1.2;
-}
-
-.ad-description {
-  font-size: 14px;
-  color: var(--el-text-color-regular);
-  margin-bottom: 8px;
-  line-height: 1.4;
-}
-
-.ad-cta {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-color-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.ad-slot.sponsor .ad-cta {
-  color: var(--el-color-success);
-}
-
-.ad-carousel-container {
-  margin: 10px;
-}
-
-.ad-carousel-container :deep(.el-carousel__container) {
-  background: transparent;
-}
-
-.ad-carousel-container :deep(.el-carousel__indicators--outside) {
-  margin-top: 0;
-}
-
-.ad-carousel-container :deep(.el-carousel__item) {
-  background: transparent;
-}
-
-.ad-carousel-container .ad-slot {
-  height: 100%;
-  box-sizing: border-box;
-}
-
-.ad-carousel-container :deep(.el-carousel__indicator--horizontal .el-carousel__button) {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.ad-slot.lincable {
-  border-color: #00d4aa;
-  background: linear-gradient(135deg, rgba(0, 212, 170, 0.1) 0%, rgba(0, 212, 170, 0.2) 100%);
-}
-
-.ad-icon.lincable-icon {
-  color: #00d4aa;
-  background: rgba(0, 212, 170, 0.15);
-}
-
-.ad-slot.lincable .ad-cta {
-  color: #00d4aa;
-}
-
-.ad-slot.autoc {
-  border-color: #6366f1;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0.2) 100%);
-}
-
-.ad-slot.autoc .ad-cta {
-  color: #6366f1;
-}
-
-.ad-image {
-  flex-shrink: 0;
-  width: 70px;
-  height: 90px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ad-image img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: 4px;
-}
 </style>

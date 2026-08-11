@@ -59,6 +59,8 @@ const handleLanguageChange = async (lang: string) => {
 
     // 重新加载翻译
     await reloadRendererTranslations(lang)
+    // 部分组件直接调用 i18next.t（非响应式），重载页面确保全部生效
+    window.location.reload()
   } catch (error) {
     console.error('Failed to change language:', error)
   } finally {

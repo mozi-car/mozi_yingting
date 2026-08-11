@@ -10,6 +10,7 @@
     "build": "npm run build:sidecar && npm run build:renderer && tauri build",
     "build:renderer": "node --max-old-space-size=8192 node_modules/vite/bin/vite.js build",
     "build:sidecar": "node scripts/build-sidecar.mjs",
+    "build:cli": "node scripts/build-cli.mjs",
     "sidecar:dev": "node out/sidecar/index.cjs",
     "tauri": "tauri",
     "dev:vite": "node --max-old-space-size=8192 node_modules/vite/bin/vite.js"
