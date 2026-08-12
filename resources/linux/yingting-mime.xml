@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-yingtproject">
+    <comment>yingting project file</comment>
+    <generic-icon name="application-x-executable"/>
+    <glob pattern="*.mytproject"/>
+    <magic priority="50">
+      <match type="string" offset="0" value="{">
+        <match type="string" offset="1" value="&quot;data&quot;"/>
+      </match>
+    </magic>
+  </mime-type>
+</mime-info>

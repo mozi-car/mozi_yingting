@@ -31,10 +31,26 @@
     "shortDescription": "婴听 - 汽车ECU开发工具",
     "longDescription": "yingting (YingTing) - 汽车ECU开发工具，基于 Tauri 2 + Rust + Node sidecar",
     "icon": ["icons/icon.png"],
+    "fileAssociations": [
+      {
+        "ext": ["mytproject"],
+        "mimeType": "application/x-yingtproject",
+        "name": "yingting",
+        "description": "yingting project file"
+      }
+    ],
     "resources": {
       "../resources": "resources",
       "../out/sidecar": "sidecar",
       "../bin/node-linux-x64": "bin/node"
+    },
+    "linux": {
+      "deb": {
+        "postInstallScript": "../scripts/deb-postinst.sh",
+        "files": {
+          "/usr/share/mime/packages/yingting.xml": "../resources/linux/yingting-mime.xml"
+        }
+      }
     }
   }
 }

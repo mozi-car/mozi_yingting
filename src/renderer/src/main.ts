@@ -111,6 +111,22 @@ const dataStore = useDataStore()
 const projectStore = useProjectStore()
 const runtimeStore = useRuntimeStore()
 
+// 双击 .mytproject 文件 / 二次启动传入文件路径时打开对应工程
+const openFileFromPath = (file: string) => {
+  if (!file) return
+  if (projectStore.open) {
+    projectStore.closeProject(file).then(() => projectStore.openProjectByPath(file, true))
+  } else {
+    projectStore.openProjectByPath(file, true)
+  }
+}
+window.electron?.ipcRenderer.invoke('take_pending_open').then((file: string) => {
+  openFileFromPath(file)
+})
+window.electron?.ipcRenderer.on('open-project', (_e: any, file: string) => {
+  openFileFromPath(file)
+})
+
 // 直接解析URL参数并赋值给window.params
 const urlParams = new URLSearchParams(window.location.search)
 window.params = {}
