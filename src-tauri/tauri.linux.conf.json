@@ -1,0 +1,7 @@
+{
+  "bundle": {
+    "resources": {
+      "../bin/node-linux-x64": "bin/node"
+    }
+  }
+}

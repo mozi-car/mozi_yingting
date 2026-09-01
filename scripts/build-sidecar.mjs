@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
+const nativeFiles = new Set()
 
 const assetPlugin = {
   name: 'yt-asset',
@@ -23,7 +24,9 @@ const assetPlugin = {
       const abs = args.path
       const rel = path.relative(root, abs)
       return {
-        contents: `export default require('path').join(require('process').env.YT_RESOURCES || __dirname.replace(/out[/\\\\]sidecar$/, ''), ${JSON.stringify(rel)})`,
+        contents: `export default require('process').env.YT_RESOURCES
+  ? require('path').join(require('process').env.YT_RESOURCES, ${JSON.stringify(rel)})
+  : require('path').join(require('path').resolve(__dirname, '..', '..'), ${JSON.stringify(rel)})`,
         loader: 'js'
       }
     })
@@ -52,21 +55,25 @@ const rawPlugin = {
 const nativePlugin = {
   name: 'yt-native',
   setup(build) {
-    build.onResolve({ filter: /\.node$/ }, (args) => ({
-      path: args.path,
-      namespace: 'yt-native'
-    }))
+    build.onResolve({ filter: /\.node$/ }, (args) => {
+      const abs = path.resolve(args.resolveDir, args.path)
+      nativeFiles.add(abs)
+      return { path: abs, namespace: 'yt-native' }
+    })
     build.onLoad({ filter: /.*/, namespace: 'yt-native' }, (args) => {
       const abs = args.path
+      const filename = path.basename(abs)
       return {
         contents: `
 let mod;
+const nativePath = require('path').join(__dirname, 'native', ${JSON.stringify(filename)});
 try {
-  mod = require(${JSON.stringify(abs)});
+  const nativeRequire = require('module').createRequire(__filename);
+  mod = nativeRequire(nativePath);
 } catch (e) {
   mod = new Proxy({}, {
     get: () => () => {
-      throw new Error('native addon unavailable: ' + ${JSON.stringify(abs)} + ' -> ' + (e && e.message))
+      throw new Error('native addon unavailable: ' + nativePath + ' -> ' + (e && e.message))
     }
   });
 }
@@ -101,6 +108,17 @@ await esbuild.build({
   },
   logLevel: 'warning'
 })
+
+const nativeDst = path.join(root, 'out/sidecar/native')
+fs.rmSync(nativeDst, { recursive: true, force: true })
+fs.mkdirSync(nativeDst, { recursive: true })
+for (const nativeFile of nativeFiles) {
+  if (!fs.existsSync(nativeFile)) {
+    console.warn(`[sidecar] native addon missing, skipped: ${nativeFile}`)
+    continue
+  }
+  fs.copyFileSync(nativeFile, path.join(nativeDst, path.basename(nativeFile)))
+}
 
 // serialport 原生 addon（bindings-cpp）无法 bundle，随包携带整个 @serialport 目录（含 bindings-interface 等）供运行时 require
 const bindingsSrc = path.join(root, 'node_modules/@serialport')

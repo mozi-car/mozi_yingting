@@ -13,11 +13,19 @@ import { SLCAN_CAN } from './slcan'
 import { Candle_CAN } from './candle'
 
 const libPath = path.dirname(dllLib)
-PEAK_TP.loadDllPath(libPath)
-ZLG_CAN.loadDllPath(libPath)
-KVASER_CAN.loadDllPath(libPath)
-TOOMOSS_CAN.loadDllPath(libPath)
-VECTOR_CAN.loadDllPath(libPath)
+for (const loader of [
+  PEAK_TP.loadDllPath,
+  ZLG_CAN.loadDllPath,
+  KVASER_CAN.loadDllPath,
+  TOOMOSS_CAN.loadDllPath,
+  VECTOR_CAN.loadDllPath
+]) {
+  try {
+    loader(libPath)
+  } catch (e) {
+    console.error('[can] driver unavailable:', e)
+  }
+}
 
 export function openCanDevice(canDevice: CanBaseInfo) {
   let canBase: CanBase | undefined

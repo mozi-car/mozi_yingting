@@ -3,8 +3,10 @@
  */
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 
-const logDir = path.join(process.cwd(), 'logs')
+const logRoot = process.env.LOCALAPPDATA || process.env.XDG_STATE_HOME || os.homedir()
+const logDir = path.join(logRoot, 'yingting', 'logs')
 let logFile: fs.WriteStream | null = null
 
 try {

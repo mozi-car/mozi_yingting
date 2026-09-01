@@ -1080,6 +1080,8 @@
       "cani": "IA",
       "pwmi": "IA",
       "lini": "IA",
+      "ethi": "IA",
+      "seriali": "IA",
       "linPanel": "Panel",
       "ldf": "LDF",
       "dbc": "DBC",
@@ -1098,15 +1100,42 @@
       "cancel": "Cancel"
     },
     "hardware": {
+      "side": {
+        "title": "Device Drivers",
+        "addChannel": "Add a channel with this driver",
+        "noVendor": "No drivers available"
+      },
+      "root": {
+        "subtitle": "Bus driver"
+      },
+      "canvas": {
+        "zoomIn": "Zoom in",
+        "zoomOut": "Zoom out",
+        "reset": "Reset view"
+      },
       "dialogs": {
         "unsavedChangesMessage": "You have unsaved changes. Do you want to save them?",
         "discardChangesMessage": "Are you sure you want to discard your changes?",
         "deleteDeviceMessage": "Are you sure to delete this device?",
+        "deleteChannelMessage": "Are you sure you want to delete this channel? Attached interfaces and script nodes will also be cleaned up.",
         "warning": "Warning",
         "save": "Save",
         "discard": "Discard",
         "cancel": "Cancel",
         "ok": "OK"
+      },
+      "channelDrawer": {
+        "title": "hardware mapping",
+        "vendor": "Vendor",
+        "selectVendor": "Select vendor",
+        "pickVendorFirst": "Please select a vendor first",
+        "database": "Database",
+        "selectDatabase": "Select database",
+        "importDatabase": "Import and associate",
+        "save": "Save"
+      },
+      "channel": {
+        "unmapped": "No hardware mapped"
       },
       "deviceTypes": {
         "can": "CAN",
@@ -2249,6 +2278,17 @@
         "replays": "Replays",
         "someip": "SomeIP"
       },
+      "configTree": {
+        "nodes": "Nodes",
+        "interactive": "Interactive Generators",
+        "replays": "Replay blocks",
+        "databases": "Databases",
+        "channels": "Channels",
+        "add": "Add",
+        "empty": "No channels. Create channels in the Devices view first.",
+        "needDevice": "Map hardware to this channel in the Devices view first.",
+        "iaLimit": "Each channel can have only one interface adapter."
+      },
       "dialogs": {
         "deleteNodeMessage": "This will permanently delete the node. Continue?",
         "warning": "Warning",
@@ -2622,6 +2662,74 @@
           "valid": "Valid",
           "assigned": "Assigned"
         }
+      },
+      "ethi": {
+        "tabs": { "actions": "Frames", "device": "Device" },
+        "columns": {
+          "name": "Name",
+          "protocol": "Protocol",
+          "dest": "Destination",
+          "trigger": "Trigger",
+          "payload": "Payload",
+          "ops": "Actions"
+        },
+        "fields": {
+          "name": "Name",
+          "protocol": "Protocol",
+          "autoHeader": "Auto IP Header",
+          "autoHeaderHint": "Source IP/MAC/port filled from the bound device on send",
+          "srcIp": "Source IP",
+          "srcPort": "Source Port",
+          "dstIp": "Dest IP",
+          "dstPort": "Dest Port",
+          "dstMac": "Dest MAC",
+          "ttl": "TTL",
+          "payload": "Payload (hex)",
+          "trigger": "Trigger",
+          "period": "Period (ms)"
+        },
+        "trigger": { "manual": "Manual", "periodic": "Periodic" },
+        "buttons": {
+          "add": "Add Frame",
+          "send": "Send",
+          "edit": "Edit",
+          "delete": "Delete",
+          "ok": "OK",
+          "cancel": "Cancel"
+        },
+        "dialog": { "title": "Ethernet Frame" },
+        "transfer": { "valid": "Valid", "assigned": "Assigned" },
+        "defaultName": "New Frame"
+      },
+      "seriali": {
+        "tabs": { "actions": "Frames", "device": "Device" },
+        "columns": {
+          "name": "Name",
+          "encoding": "Encoding",
+          "trigger": "Trigger",
+          "payload": "Payload",
+          "ops": "Actions"
+        },
+        "fields": {
+          "name": "Name",
+          "encoding": "Encoding",
+          "lineEnding": "Line Ending",
+          "payload": "Payload",
+          "trigger": "Trigger",
+          "period": "Period (ms)"
+        },
+        "trigger": { "manual": "Manual", "periodic": "Periodic" },
+        "buttons": {
+          "add": "Add Frame",
+          "send": "Send",
+          "edit": "Edit",
+          "delete": "Delete",
+          "ok": "OK",
+          "cancel": "Cancel"
+        },
+        "dialog": { "title": "Serial Frame" },
+        "transfer": { "valid": "Valid", "assigned": "Assigned" },
+        "defaultName": "New Frame"
       }
     },
     "message": {

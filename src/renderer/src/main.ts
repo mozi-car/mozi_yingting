@@ -104,7 +104,7 @@ app.use(wujieVue)
 
 // 初始化 i18n
 const savedLang = window.electron?.ipcRenderer.sendSync('electron-store-get', 'language') || 'en'
-initRendererI18n(savedLang)
+await initRendererI18n(savedLang)
 app.use(i18nPlugin)
 
 const dataStore = useDataStore()

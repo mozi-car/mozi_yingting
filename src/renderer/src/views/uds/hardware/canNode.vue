@@ -303,7 +303,7 @@ const globalStart = useGlobalStart()
 
 const data = ref<CanBaseInfo>({
   id: '',
-  name: '',
+  name: `${props.vendor.toLocaleUpperCase()}_CAN`,
   handle: '',
   vendor: 'simulate',
   canfd: false,
@@ -1387,6 +1387,9 @@ let watcher: any
 
 onBeforeMount(() => {
   getDevice(true)
+  if (!editIndex.value && !data.value.name) {
+    data.value.name = `${props.vendor.toLocaleUpperCase()}_${Object.keys(devices.devices).length + 1}`
+  }
   if (editIndex.value) {
     const editData = devices.devices[editIndex.value]
     if (editData && editData.type == 'can' && editData.canDevice) {

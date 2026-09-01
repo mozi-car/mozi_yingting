@@ -1073,6 +1073,8 @@
       "cani": "交互",
       "pwmi": "交互",
       "lini": "交互",
+      "ethi": "交互",
+      "seriali": "交互",
       "linPanel": "面板",
       "ldf": "LDF",
       "dbc": "DBC",
@@ -1091,13 +1093,40 @@
       "cancel": "取消"
     },
     "hardware": {
+      "side": {
+        "title": "设备驱动",
+        "addChannel": "使用此驱动添加通道",
+        "noVendor": "暂无可用驱动"
+      },
+      "root": {
+        "subtitle": "总线驱动"
+      },
+      "canvas": {
+        "zoomIn": "放大",
+        "zoomOut": "缩小",
+        "reset": "重置视图"
+      },
       "dialogs": {
         "discardChangesMessage": "确定要放弃您的更改吗？",
         "deleteDeviceMessage": "确定要删除此设备吗？",
+        "deleteChannelMessage": "确定要删除此通道吗？关联的接口和脚本节点绑定也会被清理。",
         "warning": "警告",
         "discard": "放弃",
         "cancel": "取消",
         "ok": "确定"
+      },
+      "channelDrawer": {
+        "title": "硬件映射",
+        "vendor": "厂商",
+        "selectVendor": "请选择厂商",
+        "pickVendorFirst": "请先选择厂商",
+        "database": "数据库",
+        "selectDatabase": "选择数据库",
+        "importDatabase": "导入并关联",
+        "save": "保存"
+      },
+      "channel": {
+        "unmapped": "未映射硬件"
       },
       "deviceTypes": {
         "can": "CAN",
@@ -2201,6 +2230,17 @@
         "replays": "回放",
         "someip": "SomeIP"
       },
+      "configTree": {
+        "nodes": "节点",
+        "interactive": "交互发生器",
+        "replays": "回放块",
+        "databases": "数据库",
+        "channels": "通道",
+        "add": "添加",
+        "empty": "暂无通道，请先在「设备」视图中创建通道。",
+        "needDevice": "请先在「设备」视图中为该通道映射硬件。",
+        "iaLimit": "每条通道只能添加一个接口适配器。"
+      },
       "dialogs": {
         "deleteNodeMessage": "此操作将永久删除该节点。是否继续？",
         "warning": "警告",
@@ -2559,6 +2599,74 @@
           "valid": "可用",
           "assigned": "已分配"
         }
+      },
+      "ethi": {
+        "tabs": { "actions": "报文", "device": "设备" },
+        "columns": {
+          "name": "名称",
+          "protocol": "协议",
+          "dest": "目标",
+          "trigger": "触发",
+          "payload": "数据",
+          "ops": "操作"
+        },
+        "fields": {
+          "name": "名称",
+          "protocol": "协议",
+          "autoHeader": "自动填充IP头",
+          "autoHeaderHint": "发送时从绑定设备自动填充源IP/MAC/端口",
+          "srcIp": "源IP",
+          "srcPort": "源端口",
+          "dstIp": "目标IP",
+          "dstPort": "目标端口",
+          "dstMac": "目标MAC",
+          "ttl": "TTL",
+          "payload": "数据(十六进制)",
+          "trigger": "触发方式",
+          "period": "周期(ms)"
+        },
+        "trigger": { "manual": "手动", "periodic": "周期" },
+        "buttons": {
+          "add": "添加报文",
+          "send": "发送",
+          "edit": "编辑",
+          "delete": "删除",
+          "ok": "确定",
+          "cancel": "取消"
+        },
+        "dialog": { "title": "以太网报文" },
+        "transfer": { "valid": "可用", "assigned": "已分配" },
+        "defaultName": "新报文"
+      },
+      "seriali": {
+        "tabs": { "actions": "报文", "device": "设备" },
+        "columns": {
+          "name": "名称",
+          "encoding": "编码",
+          "trigger": "触发",
+          "payload": "数据",
+          "ops": "操作"
+        },
+        "fields": {
+          "name": "名称",
+          "encoding": "编码",
+          "lineEnding": "行结束符",
+          "payload": "数据",
+          "trigger": "触发方式",
+          "period": "周期(ms)"
+        },
+        "trigger": { "manual": "手动", "periodic": "周期" },
+        "buttons": {
+          "add": "添加报文",
+          "send": "发送",
+          "edit": "编辑",
+          "delete": "删除",
+          "ok": "确定",
+          "cancel": "取消"
+        },
+        "dialog": { "title": "串口报文" },
+        "transfer": { "valid": "可用", "assigned": "已分配" },
+        "defaultName": "新报文"
       }
     },
     "message": {

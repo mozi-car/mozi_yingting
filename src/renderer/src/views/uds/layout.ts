@@ -48,6 +48,8 @@ export interface LayoutItem {
   label: string
   labelKey?: string
   allowExt?: boolean
+  /** Open this window maximized by default (avoids cascading pop-up editors jumping around). */
+  defaultMax?: boolean
   layoutType?: 'bottom' | 'top' | 'left' | 'right'
 }
 export const layoutMap: Record<string, LayoutItem> = {
@@ -163,7 +165,8 @@ export const layoutMap: Record<string, LayoutItem> = {
     label: 'Network',
     labelKey: 'uds.windows.network',
     key: 'network',
-    component: defineAsyncComponent(() => import('./network/index.vue')),
+    defaultMax: true,
+    component: defineAsyncComponent(() => import('./network/configTree.vue')),
     icon: networkNode
   },
   hardware: {
@@ -175,6 +178,7 @@ export const layoutMap: Record<string, LayoutItem> = {
     label: 'Devices',
     labelKey: 'uds.windows.hardware',
     key: 'hardware',
+    defaultMax: true,
     component: defineAsyncComponent(() => import('./hardware/index.vue')),
     icon: deviceIcon
   },
@@ -259,6 +263,7 @@ export const layoutMap: Record<string, LayoutItem> = {
     labelKey: 'uds.windows.cani',
     key: 'IA',
     allowExt: true,
+    defaultMax: true,
     component: defineAsyncComponent(() => import('./ia/cani.vue')),
     icon: interIcon
   },
@@ -273,6 +278,7 @@ export const layoutMap: Record<string, LayoutItem> = {
     label: 'IA',
     labelKey: 'uds.windows.pwmi',
     key: 'IA',
+    defaultMax: true,
     component: defineAsyncComponent(() => import('./ia/pwmi.vue')),
     icon: interIcon
   },
@@ -285,7 +291,34 @@ export const layoutMap: Record<string, LayoutItem> = {
     label: 'IA',
     labelKey: 'uds.windows.lini',
     key: 'IA',
+    defaultMax: true,
     component: defineAsyncComponent(() => import('./ia/lini.vue')),
+    icon: interIcon
+  },
+  ethi: {
+    i: 'IA',
+    x: 0,
+    y: 0,
+    w: 760,
+    h: 460,
+    label: 'IA',
+    labelKey: 'uds.windows.ethi',
+    key: 'IA',
+    defaultMax: true,
+    component: defineAsyncComponent(() => import('./ia/ethi.vue')),
+    icon: interIcon
+  },
+  seriali: {
+    i: 'IA',
+    x: 0,
+    y: 0,
+    w: 720,
+    h: 440,
+    label: 'IA',
+    labelKey: 'uds.windows.seriali',
+    key: 'IA',
+    defaultMax: true,
+    component: defineAsyncComponent(() => import('./ia/seriali.vue')),
     icon: interIcon
   },
   linPanel: {
@@ -309,6 +342,7 @@ export const layoutMap: Record<string, LayoutItem> = {
     label: 'LDF',
     labelKey: 'uds.windows.ldf',
     key: 'LDF',
+    defaultMax: true,
     component: defineAsyncComponent(() => import('../../database/ldf/index.vue')),
     icon: database
   },
@@ -321,6 +355,7 @@ export const layoutMap: Record<string, LayoutItem> = {
     label: 'DBC',
     labelKey: 'uds.windows.dbc',
     key: 'DBC',
+    defaultMax: true,
     component: defineAsyncComponent(() => import('../../database/dbc/index.vue')),
     icon: database
   },
@@ -333,6 +368,7 @@ export const layoutMap: Record<string, LayoutItem> = {
     label: 'ORTI',
     labelKey: 'uds.windows.orti',
     key: 'ORTI',
+    defaultMax: true,
     component: defineAsyncComponent(() => import('../../database/orti/index.vue')),
     icon: database
   },
@@ -345,6 +381,7 @@ export const layoutMap: Record<string, LayoutItem> = {
     label: 'SOA',
     labelKey: 'uds.windows.soa',
     key: 'SOA',
+    defaultMax: true,
     component: defineAsyncComponent(() => import('./someip/soa.vue')),
     icon: soaIcon
   },
@@ -357,6 +394,7 @@ export const layoutMap: Record<string, LayoutItem> = {
     label: 'IA',
     labelKey: 'uds.windows.someipi',
     key: 'IA',
+    defaultMax: true,
     component: defineAsyncComponent(() => import('./someip/si.vue')),
     icon: interIcon
   },
@@ -950,6 +988,13 @@ export class Layout {
       this.event.emit('add', this.data.project.wins[id])
       // this.data.projectDirty = true
       this.clickWin(id)
+    }
+    // Pop-up editors open maximized so clicking around doesn't scatter cascading windows.
+    if (this.validLayout[title].defaultMax) {
+      const win = this.data.project.wins[id]
+      if (win && !win.isMax) {
+        this.maxWin(id)
+      }
     }
     this.activeWin.value = id
   }

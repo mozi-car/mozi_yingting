@@ -33,6 +33,9 @@ fn resolve_runtime(app: &AppHandle) -> (std::path::PathBuf, std::path::PathBuf) 
     let res = app.path().resource_dir();
     eprintln!("[bridge] resource_dir = {:?}", res);
     if let Ok(res) = res {
+        #[cfg(windows)]
+        let node = res.join("bin/node.exe");
+        #[cfg(not(windows))]
         let node = res.join("bin/node");
         let cjs = res.join("sidecar/index.cjs");
         eprintln!(

@@ -14,16 +14,19 @@ import { createLogs } from './log'
 import Transport from 'winston-transport'
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 
 log.initialize()
 
 // winston sysLog/scriptLog 文件传输器
-const logDir = path.join(process.cwd(), 'logs')
+const logRoot = process.env.LOCALAPPDATA || process.env.XDG_STATE_HOME || os.homedir()
+const logDir = path.join(logRoot, 'yingting', 'logs')
 try {
   fs.mkdirSync(logDir, { recursive: true })
 } catch {
   /* ignore */
 }
+log.info('[runtime] log directory:', logDir)
 
 class SidecarTransport extends Transport {
   private stream: fs.WriteStream | null = null

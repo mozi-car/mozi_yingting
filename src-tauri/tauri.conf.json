@@ -17,7 +17,8 @@
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
-        "minHeight": 700
+        "minHeight": 700,
+        "maximized": true
       }
     ],
     "security": {
@@ -41,8 +42,7 @@
     ],
     "resources": {
       "../resources": "resources",
-      "../out/sidecar": "sidecar",
-      "../bin/node-linux-x64": "bin/node"
+      "../out/sidecar": "sidecar"
     },
     "linux": {
       "deb": {

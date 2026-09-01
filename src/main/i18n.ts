@@ -35,6 +35,7 @@ function loadTranslationsFromDir(dir: string, lng: string): Record<string, any> 
 function loadAllTranslations(lng: string): Record<string, any> {
   const merged: Record<string, any> = {}
   const appLocalesPath = getAppLocalesPath()
+  log.info(`[i18n] loading ${lng} from ${appLocalesPath}`)
 
   try {
     // 加载主应用翻译：locales/{lng}/translation.json
@@ -51,6 +52,8 @@ function loadAllTranslations(lng: string): Record<string, any> {
   } catch (error) {
     log.error(`Failed to load translations for ${lng}:`, error)
   }
+
+  log.info(`[i18n] loaded ${lng}: ${Object.keys(merged).length} top-level keys`)
 
   return merged
 }

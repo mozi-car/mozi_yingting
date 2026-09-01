@@ -1,248 +1,422 @@
 <template>
-  <div v-loading="loading" class="main">
-    <div class="left">
-      <el-scrollbar :height="h + 'px'">
-        <el-tree
-          ref="treeRef"
-          node-key="id"
-          default-expand-all
-          :data="tData"
-          :expand-on-click-node="false"
-          highlight-current
-          @node-click="nodeClick"
-        >
-          <template #default="{ node, data }">
-            <div class="tree-node">
-              <span
-                :class="{
-                  isTop: node.level === 1,
-                  vm: true,
-                  treeLabel: true
-                }"
-              >
-                <span v-if="data.vendor == 'ecubus' && node.level == 1" class="ecubus-logo">
-                  <img src="@r/assets/logo1.svg" />
-                  <Icon
-                    :icon="hoveredyingting ? questionIcon1 : questionIcon"
-                    style="width: 16px; height: 16px; color: var(--el-color-primary)"
-                    @click.stop="openyingtingHardware"
-                    @mouseenter="hoveredyingting = true"
-                    @mouseleave="hoveredyingting = false"
-                  />
-                </span>
-
-                <span v-else>{{ node.label }}</span>
-                <el-tag
-                  v-if="node.level == 3 && data.index !== undefined"
-                  effect="light"
-                  round
-                  size="small"
-                  style="margin-left: 10px"
-                >
-                  {{ data.index }}
-                </el-tag>
-              </span>
-              <el-button
-                v-if="data.append"
-                :disabled="globalStart"
-                type="primary"
-                link
-                @click.stop="addNewDevice(data)"
-              >
-                <Icon class="tree-add" :icon="circlePlusFilled" />
-              </el-button>
-
-              <el-button
-                v-else-if="node.parent?.data.append"
-                :disabled="globalStart"
-                type="danger"
-                link
-                @click.stop="removeDevice(data.id)"
-              >
-                <Icon class="tree-delete" :icon="removeIcon" />
-              </el-button>
-            </div>
-          </template>
-        </el-tree>
-      </el-scrollbar>
+  <div class="hw-main">
+    <div class="hw-toolbar">
+      <el-tabs v-model="activeType" class="hw-tabs">
+        <el-tab-pane v-for="t in BUS_TYPES" :key="t" :label="TAB_LABELS[t]" :name="t" />
+      </el-tabs>
+      <el-dropdown trigger="click" @command="handleCanvasCommand">
+        <el-button link class="hw-more" aria-label="Canvas actions">...</el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="zoomIn">
+              <Icon :icon="zoomInRounded" />
+              {{ i18next.t('uds.hardware.canvas.zoomIn') }}
+            </el-dropdown-item>
+            <el-dropdown-item command="zoomOut">
+              <Icon :icon="zoomOutRounded" />
+              {{ i18next.t('uds.hardware.canvas.zoomOut') }}
+            </el-dropdown-item>
+            <el-dropdown-item command="fit">
+              <Icon :icon="fullscreenIcon" />
+              {{ i18next.t('uds.hardware.canvas.reset') }}
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
-    <div :id="`${winKey}Shift`" class="shift" />
-    <div class="right">
-      <div v-if="activeTree">
-        <canNodeVue
-          v-if="activeTree.type == 'can'"
-          ref="canNodeRef"
-          v-model="dataModify"
-          :height="h"
-          :index="activeTree.id"
-          :vendor="activeTree.vendor"
-          @change="nodeChange"
-        />
-        <ethNodeVue
-          v-else-if="activeTree.type == 'eth'"
-          ref="ethNodeRef"
-          v-model="dataModify"
-          :index="activeTree.id"
-          :vendor="activeTree.vendor"
-          @change="nodeChange"
-        />
-        <LinNodeVue
-          v-else-if="activeTree.type == 'lin'"
-          ref="linNodeRef"
-          v-model="dataModify"
-          :index="activeTree.id"
-          :vendor="activeTree.vendor"
-          @change="nodeChange"
-        />
-        <PwmNodeVue
-          v-else-if="activeTree.type == 'pwm'"
-          ref="pwmNodeRef"
-          v-model="dataModify"
-          :index="activeTree.id"
-          :vendor="activeTree.vendor"
-          @change="nodeChange"
-        />
-        <SerialNodeVue
-          v-else-if="activeTree.type == 'serial'"
-          ref="serialNodeRef"
-          v-model="dataModify"
-          :index="activeTree.id"
-          :vendor="activeTree.vendor"
-          @change="nodeChange"
+    <div class="hw-body">
+      <div class="hw-side">
+        <div class="hw-side-title">{{ i18next.t('uds.hardware.side.title') }}</div>
+        <el-scrollbar :height="canvasHeight() - 30 + 'px'">
+          <el-tree
+            :data="vendorTree"
+            node-key="id"
+            :expand-on-click-node="false"
+            default-expand-all
+          >
+            <template #default="{ node, data }">
+              <div class="hw-side-node">
+                <span class="hw-side-label" :title="node.label">
+                  <Icon
+                    v-if="data.kind === 'vendor'"
+                    :icon="driverIcon"
+                    class="hw-side-icon"
+                  />
+                  <Icon v-else :icon="chipIcon" class="hw-side-icon dim" />
+                  <span :class="{ vendorName: data.kind === 'vendor' }">{{ node.label }}</span>
+                  <span v-if="data.serial" class="hw-side-serial">#{{ data.serial }}</span>
+                </span>
+                <el-button
+                  v-if="data.kind === 'vendor'"
+                  link
+                  type="primary"
+                  :title="i18next.t('uds.hardware.side.addChannel')"
+                  @click.stop="addChannelForVendor(data.vendor)"
+                >
+                  <Icon :icon="plusIcon" />
+                </el-button>
+              </div>
+            </template>
+          </el-tree>
+          <el-empty
+            v-if="vendorTree.length === 0"
+            :description="i18next.t('uds.hardware.side.noVendor')"
+            :image-size="60"
+          />
+        </el-scrollbar>
+      </div>
+      <div class="hw-canvas-area">
+        <div
+          v-for="t in BUS_TYPES"
+          v-show="activeType === t"
+          :key="t"
+          :ref="setCanvasRef(t)"
+          class="hw-canvas"
         />
       </div>
     </div>
+
+    <channelDrawer
+      v-model:visible="drawerVisible"
+      :channel="editingChannel"
+      :bus-type="activeType"
+      :preset-vendor="presetVendor"
+      @saved="onChannelSaved"
+    />
   </div>
 </template>
-
 <script lang="ts" setup>
-import {
-  Ref,
-  computed,
-  inject,
-  nextTick,
-  onBeforeMount,
-  onMounted,
-  onUnmounted,
-  ref,
-  toRef,
-  watch
-} from 'vue'
+import { ref, inject, onMounted, watch, nextTick, h } from 'vue'
+import * as joint from '@joint/core'
 import { Icon } from '@iconify/vue'
-import { type FormRules, type FormInstance, ElMessageBox, ElMessage } from 'element-plus'
-import circlePlusFilled from '@iconify/icons-ep/circle-plus-filled'
-import removeIcon from '@iconify/icons-ep/remove'
-import { useDataStore } from '@r/stores/data'
-import canNodeVue from './canNode.vue'
-import ethNodeVue from './ethNode.vue'
-import { CanVendor } from 'nodeCan/can'
-import { Layout } from '../layout'
-import LinNodeVue from './linNode.vue'
-import { useGlobalStart } from '@r/stores/runtime'
-import { ecubusPro } from '../../../../../../package.json'
-import questionIcon from '@iconify/icons-mdi/question-mark-circle-outline'
-import questionIcon1 from '@iconify/icons-mdi/question-mark-circle'
-import PwmNodeVue from './pwmNode.vue'
-import SerialNodeVue from './serialNode.vue'
+import { ElMessageBox } from 'element-plus'
 import i18next from 'i18next'
+import { v4 } from 'uuid'
+import { cloneDeep } from 'lodash'
+import fullscreenIcon from '@iconify/icons-material-symbols/fullscreen'
+import zoomInRounded from '@iconify/icons-material-symbols/zoom-in-rounded'
+import zoomOutRounded from '@iconify/icons-material-symbols/zoom-out-rounded'
+import driverIcon from '@iconify/icons-material-symbols/hard-drive-outline'
+import chipIcon from '@iconify/icons-material-symbols/memory-alt-outline'
+import plusIcon from '@iconify/icons-ep/circle-plus-filled'
+import { useDataStore } from '@r/stores/data'
+import { useProjectStore } from '@r/stores/project'
+import { Layout } from '../layout'
+import type { HardwareChannel } from 'src/preload/data'
+import type { CanVendor } from 'nodeCan/can'
+import { HardwareBoard, type ChannelVM, type ChildVM } from './hardwareGraph'
+import {
+  BUS_TYPES,
+  BUS_TYPE_PREFIX,
+  IA_SUPPORTED_TYPES,
+  vendorSupportsType,
+  getDeviceSummary,
+  type BusType
+} from './busTypes'
+import channelDrawer from './channelDrawer.vue'
+import nodeConfig from '../network/nodeConfig.vue'
+import { ecubusPro } from '../../../../../../package.json'
 
-const loading = ref(false)
-const activeTree = ref<tree>()
-const hoveredyingting = ref(false)
 const props = defineProps<{
   height: number
   width: number
   deviceId?: string
 }>()
+
 const winKey = 'hardware'
-const h = toRef(props, 'height')
-const w = toRef(props, 'width')
-const leftWidth = ref(220)
-const dataModify = ref(false)
-const treeRef = ref()
-const devices = useDataStore()
-const globalStart = useGlobalStart()
+const dataBase = useDataStore()
+const projectStore = useProjectStore()
+const layout = inject('layout') as Layout
 
-// Refs for node components to call save method
-const canNodeRef = ref()
-const ethNodeRef = ref()
-const linNodeRef = ref()
-const pwmNodeRef = ref()
-const serialNodeRef = ref()
-
-function openyingtingHardware() {
-  window.electron.ipcRenderer.send('ipc-open-link', 'https://app.whyengineer.com/docs/um/hardware/')
+const TAB_LABELS: Record<BusType, string> = {
+  can: 'CAN',
+  lin: 'LIN',
+  eth: 'ETH · DoIP',
+  pwm: 'PWM',
+  serial: 'Serial'
 }
 
-// Helper function to show save dialog with three buttons
-async function showSaveDialog(done: () => void): Promise<void> {
+const activeType = ref<BusType>('can')
+const drawerVisible = ref(false)
+const editingChannel = ref<HardwareChannel | null>(null)
+const presetVendor = ref<CanVendor | undefined>()
+
+interface VendorTreeNode {
+  id: string
+  label: string
+  kind: 'vendor' | 'device'
+  vendor: CanVendor
+  serial?: string
+  children?: VendorTreeNode[]
+}
+const vendorTree = ref<VendorTreeNode[]>([])
+
+const DEVICE_IPC: Record<BusType, string> = {
+  can: 'ipc-get-can-devices',
+  eth: 'ipc-get-eth-devices',
+  lin: 'ipc-get-lin-devices',
+  pwm: 'ipc-get-pwm-devices',
+  serial: 'ipc-get-serial-devices'
+}
+
+/** Loads the always-visible vendor/driver list (and any detected hardware) for the active bus type. */
+async function loadVendorTree(t: BusType) {
+  let vendors: CanVendor[] = []
   try {
-    const action = await ElMessageBox({
-      message: i18next.t('uds.hardware.dialogs.unsavedChangesMessage'),
-      title: i18next.t('uds.hardware.dialogs.warning'),
-      showCancelButton: true,
-      showClose: true,
-      closeOnClickModal: false,
-      confirmButtonText: i18next.t('uds.hardware.dialogs.save'),
-      cancelButtonText: i18next.t('uds.hardware.dialogs.discard'),
-      distinguishCancelAndClose: true,
-      type: 'warning',
-      buttonSize: 'small',
-      appendTo: `#win${winKey}`
-    })
-
-    // User clicked Save
-    let saved = false
-    if (activeTree.value?.type == 'can' && canNodeRef.value) {
-      saved = await canNodeRef.value.save()
-    } else if (activeTree.value?.type == 'eth' && ethNodeRef.value) {
-      saved = await ethNodeRef.value.save?.()
-    } else if (activeTree.value?.type == 'lin' && linNodeRef.value) {
-      saved = await linNodeRef.value.save?.()
-    } else if (activeTree.value?.type == 'pwm' && pwmNodeRef.value) {
-      saved = await pwmNodeRef.value.save?.()
-    } else if (activeTree.value?.type == 'serial' && serialNodeRef.value) {
-      saved = await serialNodeRef.value.save?.()
-    }
-
-    if (saved) {
-      done()
-    }
-    // If validation failed, don't proceed
-  } catch (action: any) {
-    if (action === 'cancel') {
-      // User clicked Discard
-      dataModify.value = false
-      done()
-    } else if (action === 'close') {
-      // User clicked X or pressed ESC - cancel the operation, keep current selection
-      treeRef.value?.setCurrentKey(activeTree.value?.id)
-    }
+    vendors = (await window.electron.ipcRenderer.invoke('ipc-get-vendor', ecubusPro)).map(
+      (v: any) => v.name as CanVendor
+    )
+  } catch {
+    vendors = []
   }
+  const supported = vendors.filter((v) => vendorSupportsType(v, t))
+  const nodes: VendorTreeNode[] = []
+  for (const vendor of supported) {
+    const node: VendorTreeNode = {
+      id: `${t}:${vendor}`,
+      label: vendor.toUpperCase(),
+      kind: 'vendor',
+      vendor,
+      children: []
+    }
+    try {
+      const devices =
+        t === 'serial'
+          ? await window.electron.ipcRenderer.invoke(DEVICE_IPC[t])
+          : await window.electron.ipcRenderer.invoke(DEVICE_IPC[t], vendor.toUpperCase())
+      for (const d of devices || []) {
+        node.children!.push({
+          id: `${t}:${vendor}:${d.handle ?? d.id ?? d.label}`,
+          label: d.label ?? d.name ?? String(d.handle),
+          kind: 'device',
+          vendor,
+          serial: d.serialNumber
+        })
+      }
+    } catch {
+      // Enumeration can fail if the driver DLL/hardware is unavailable; still show the vendor.
+    }
+    nodes.push(node)
+  }
+  if (activeType.value === t) vendorTree.value = nodes
 }
 
-function nodeClick(data: tree, node: any) {
-  if (activeTree.value?.id == data.id) {
-    return
+function addChannelForVendor(vendor: CanVendor) {
+  const t = activeType.value
+  const id = v4()
+  const count = Object.values(dataBase.channels).filter((c) => c.type === t).length
+  dataBase.channels[id] = {
+    id,
+    type: t,
+    name: `${BUS_TYPE_PREFIX[t]}${count}`
   }
-  if (node.parent?.data.append == true) {
-    const done = () => {
-      activeTree.value = undefined
-      nextTick(() => {
-        activeTree.value = data
-      })
+  renderType(t)
+  presetVendor.value = vendor
+  editingChannel.value = dataBase.channels[id]
+  drawerVisible.value = true
+}
+
+watch(activeType, () => {
+  renderType(activeType.value)
+  loadVendorTree(activeType.value)
+})
+
+watch(drawerVisible, (v) => {
+  if (!v) presetVendor.value = undefined
+})
+
+function zoom(delta: number) {
+  const paper = papers[activeType.value]
+  if (!paper) return
+  const s = Math.max(0.3, Math.min(2.5, paper.scale().sx + delta))
+  paper.scale(s)
+}
+function fit() {
+  const paper = papers[activeType.value]
+  if (!paper) return
+  paper.scale(1)
+  paper.translate(0, 0)
+}
+
+function handleCanvasCommand(command: 'zoomIn' | 'zoomOut' | 'fit') {
+  if (command === 'zoomIn') zoom(0.2)
+  else if (command === 'zoomOut') zoom(-0.2)
+  else fit()
+}
+
+// --- per bus-type canvas / graph setup ---
+const canvasEls: Partial<Record<BusType, HTMLElement>> = {}
+function setCanvasRef(t: BusType) {
+  return (el: unknown) => {
+    if (el) canvasEls[t] = el as HTMLElement
+  }
+}
+const boards: Partial<Record<BusType, HardwareBoard>> = {}
+const papers: Partial<Record<BusType, joint.dia.Paper>> = {}
+
+function canvasHeight() {
+  return Math.max(200, props.height - 88)
+}
+
+function canvasWidth() {
+  return Math.max(200, props.width - 226)
+}
+
+function attachPan(paper: joint.dia.Paper) {
+  let panning = false
+  let start = { x: 0, y: 0 }
+  paper.on('blank:pointerdown', (_evt: unknown, x: number, y: number) => {
+    panning = true
+    start = { x, y }
+  })
+  paper.on('blank:pointermove', (_evt: unknown, x: number, y: number) => {
+    if (panning) {
+      paper.translate(paper.translate().tx + (x - start.x), paper.translate().ty + (y - start.y))
     }
-    if (dataModify.value && activeTree.value) {
-      showSaveDialog(done)
+  })
+  paper.on('blank:pointerup', () => {
+    panning = false
+  })
+  paper.el.addEventListener('wheel', (event: WheelEvent) => {
+    event.preventDefault()
+    const delta = event.deltaY
+    if (event.ctrlKey) {
+      const offset = paper.clientToLocalPoint(event.clientX, event.clientY)
+      const currentScale = Math.max(0.3, Math.min(2.5, paper.scale().sx - delta * 0.001))
+      paper.scaleUniformAtPoint(currentScale, offset)
     } else {
-      done()
+      paper.translate(paper.translate().tx, paper.translate().ty - delta * 0.2)
     }
-  }
+  })
 }
 
-function removeDevice(id: string) {
+function createBoard(t: BusType) {
+  const graph = new joint.dia.Graph()
+  const board = new HardwareBoard(graph)
+  boards[t] = board
+  const paper = new joint.dia.Paper({
+    el: canvasEls[t],
+    model: graph,
+    width: canvasWidth(),
+    height: canvasHeight(),
+    gridSize: 10,
+    drawGrid: false,
+    background: { color: 'var(--el-fill-color-blank)' },
+    interactive: false,
+    defaultLink: () => new joint.shapes.standard.Link(),
+    linkPinning: false
+  })
+  papers[t] = paper
+  board.setPaper(paper)
+  attachPan(paper)
+  bindBoardEvents(t, board)
+  renderType(t)
+}
+
+function bindBoardEvents(t: BusType, board: HardwareBoard) {
+  board.on('addChannel', () => addChannel(t))
+  board.on('gear', (id) => openDrawer(t, id))
+  board.on('moveUp', (id) => moveChannel(t, id, -1))
+  board.on('moveDown', (id) => moveChannel(t, id, 1))
+  board.on('addIa', (id) => addIa(t, id))
+  board.on('addNode', (id) => addNode(t, id))
+  board.on('removeChannel', (id) => removeChannel(t, id))
+  board.on('removeChild', (id) => removeChild(board, id))
+  board.on('editChild', (id) => editChild(board, id))
+}
+
+function buildChannelVMs(type: BusType): ChannelVM[] {
+  const list = Object.values(dataBase.channels).filter((c) => c.type === type)
+
+  return list.map((c, idx) => {
+    const device = c.deviceId ? dataBase.devices[c.deviceId] : undefined
+    const children: ChildVM[] = []
+    if (c.deviceId) {
+      for (const [iaId, ia] of Object.entries(dataBase.ia)) {
+        if (ia.devices.includes(c.deviceId)) {
+          children.push({ id: iaId, kind: 'ia', name: ia.name })
+        }
+      }
+      for (const [nodeId, nd] of Object.entries(dataBase.nodes)) {
+        if (nd.channel[0] === c.deviceId) {
+          children.push({ id: nodeId, kind: 'node', name: nd.name })
+        }
+      }
+    }
+    const summary = getDeviceSummary(device)
+    const hasIa = children.some((child) => child.kind === 'ia')
+    return {
+      id: c.id,
+      name: c.name,
+      configured: !!c.deviceId,
+      summary: c.deviceId
+        ? {
+            vendorDevice: [summary.vendor?.toUpperCase(), summary.model].filter(Boolean).join(' · '),
+            baudRes: [summary.param1, summary.param2].filter(Boolean).join(' · ')
+          }
+        : null,
+      canMoveUp: idx > 0,
+      canMoveDown: idx < list.length - 1,
+      canAddIa: !!c.deviceId && IA_SUPPORTED_TYPES.includes(type) && !hasIa,
+      children
+    }
+  })
+}
+
+function renderType(t: BusType) {
+  const board = boards[t]
+  if (!board) return
+  const channels = buildChannelVMs(t)
+  board.render(TAB_LABELS[t], channels, canvasWidth(), canvasHeight())
+}
+
+function addChannel(t: BusType) {
+  const id = v4()
+  const count = Object.values(dataBase.channels).filter((c) => c.type === t).length
+  dataBase.channels[id] = {
+    id,
+    type: t,
+    name: `${BUS_TYPE_PREFIX[t]}${count}`
+  }
+  renderType(t)
+}
+
+function openDrawer(t: BusType, channelId: string) {
+  const ch = dataBase.channels[channelId]
+  if (!ch) return
+  editingChannel.value = ch
+  drawerVisible.value = true
+}
+
+function onChannelSaved(channelId: string, deviceId: string) {
+  const ch = dataBase.channels[channelId]
+  if (ch) {
+    ch.deviceId = deviceId
+  }
+  renderType(activeType.value)
+}
+
+function moveChannel(t: BusType, id: string, dir: -1 | 1) {
+  const keys = Object.keys(dataBase.channels)
+  const typeKeys = keys.filter((k) => dataBase.channels[k].type === t)
+  const idx = typeKeys.indexOf(id)
+  const swapWith = idx + dir
+  if (idx < 0 || swapWith < 0 || swapWith >= typeKeys.length) return
+  const otherId = typeKeys[swapWith]
+  const idxInAll = keys.indexOf(id)
+  const idxOtherInAll = keys.indexOf(otherId)
+  ;[keys[idxInAll], keys[idxOtherInAll]] = [keys[idxOtherInAll], keys[idxInAll]]
+  const rebuilt: Record<string, HardwareChannel> = {}
+  for (const k of keys) rebuilt[k] = dataBase.channels[k]
+  dataBase.channels = rebuilt
+  renderType(t)
+}
+
+function removeChannel(t: BusType, id: string) {
+  const ch = dataBase.channels[id]
+  if (!ch) return
   ElMessageBox.confirm(
-    i18next.t('uds.hardware.dialogs.deleteDeviceMessage'),
+    i18next.t('uds.hardware.dialogs.deleteChannelMessage'),
     i18next.t('uds.hardware.dialogs.warning'),
     {
       confirmButtonText: i18next.t('uds.hardware.dialogs.ok'),
@@ -253,541 +427,318 @@ function removeDevice(id: string) {
     }
   )
     .then(() => {
-      if (id == activeTree.value?.id) {
-        dataModify.value = false
-        activeTree.value = undefined
+      const deviceId = ch.deviceId
+      if (deviceId) {
+        for (const iaId of Object.keys(dataBase.ia)) {
+          const ia = dataBase.ia[iaId]
+          if (ia.devices.includes(deviceId)) {
+            ia.devices = ia.devices.filter((d) => d !== deviceId)
+            if (ia.devices.length === 0) delete dataBase.ia[iaId]
+          }
+        }
+        for (const nodeId of Object.keys(dataBase.nodes)) {
+          const nd = dataBase.nodes[nodeId]
+          if (nd.channel.includes(deviceId)) {
+            nd.channel = nd.channel.filter((d) => d !== deviceId)
+            if (nd.channel.length === 0) delete dataBase.nodes[nodeId]
+          }
+        }
+        delete dataBase.devices[deviceId]
       }
-      delete devices.devices[id]
-      treeRef.value?.remove(id)
+      delete dataBase.channels[id]
+      renderType(t)
     })
-    .catch(() => {
-      null
-    })
-}
-function addNewDevice(node: tree) {
-  const done = () => {
-    activeTree.value = undefined
-    nextTick(() => {
-      activeTree.value = node
-    })
-  }
-
-  if (dataModify.value && activeTree.value) {
-    showSaveDialog(done)
-  } else {
-    done()
-  }
+    .catch(() => null)
 }
 
-function nodeChange(id: string, name: string) {
-  //change tree stuff
+function addIa(t: BusType, channelId: string) {
+  if (!IA_SUPPORTED_TYPES.includes(t)) return
+  const ch = dataBase.channels[channelId]
+  if (!ch?.deviceId) return
+  const id = v4()
+  dataBase.ia[id] = {
+    id,
+    name: i18next.t('uds.network.names.iaTemplate', { label: ch.name }),
+    type: t as 'can' | 'lin' | 'pwm' | 'eth' | 'serial',
+    devices: [ch.deviceId],
+    action: []
+  }
+  renderType(t)
+}
 
-  const node = treeRef.value?.getNode(id)
-  if (node) {
-    node.data.label = name
-  } else {
-    // 按照devices.devices的顺序计算索引（新设备已经在devices.devices中），与 buildTree 一致从 1 开始
-    const deviceIndexMap = new Map<string, number>()
-    let index = 1
-    for (const key of Object.keys(devices.devices)) {
-      deviceIndexMap.set(key, index++)
+function addNode(t: BusType, channelId: string) {
+  const ch = dataBase.channels[channelId]
+  if (!ch?.deviceId) return
+  const id = v4()
+  dataBase.nodes[id] = {
+    id,
+    name: i18next.t('uds.network.names.nodeTemplate', {
+      count: Object.keys(dataBase.nodes).length + 1
+    }),
+    channel: [ch.deviceId]
+  }
+  renderType(t)
+}
+
+function removeChild(board: HardwareBoard, id: string) {
+  const kind = board.getChildKind(id)
+  if (kind === 'ia') {
+    delete dataBase.ia[id]
+  } else if (kind === 'node') {
+    const node = dataBase.nodes[id]
+    if (node) {
+      window.electron.ipcRenderer.invoke(
+        'ipc-delete-node',
+        projectStore.projectInfo.path,
+        projectStore.projectInfo.name,
+        cloneDeep(node)
+      )
     }
-    const newIndex = deviceIndexMap.get(id) ?? Object.keys(devices.devices).length + 1
+    delete dataBase.nodes[id]
+  }
+  renderType(activeType.value)
+}
 
-    treeRef.value?.append(
-      {
-        label: name,
-        append: false,
-        id: id,
-        vendor: activeTree.value?.vendor,
-        type: activeTree.value?.type,
-        index: newIndex
+function editChild(board: HardwareBoard, id: string) {
+  const kind = board.getChildKind(id)
+  if (kind === 'ia') {
+    const ia = dataBase.ia[id]
+    if (!ia) return
+    const winTypeByBus: Record<string, string> = {
+      can: 'cani',
+      lin: 'lini',
+      pwm: 'pwmi',
+      eth: 'ethi',
+      serial: 'seriali'
+    }
+    const winType = winTypeByBus[ia.type] ?? 'pwmi'
+    layout.addWin(winType, `${id}_ia`, { name: ia.name, params: { 'edit-index': id } })
+  } else if (kind === 'node') {
+    const node = dataBase.nodes[id]
+    if (!node) return
+    ElMessageBox({
+      buttonSize: 'small',
+      showConfirmButton: false,
+      title: i18next.t('uds.network.udsView.dialogs.editNode', { name: node.name }),
+      showClose: false,
+      customStyle: {
+        width: '600px',
+        maxWidth: 'none'
       },
-      activeTree.value?.id
-    )
+      message: () => h(nodeConfig, { editIndex: id })
+    }).catch(() => null)
   }
-  activeTree.value = undefined
 }
 
-interface tree {
-  label: string
-  vendor: CanVendor
-  type?: 'can' | 'lin' | 'eth' | 'pwm' | 'serial'
-  append: boolean
-  id: string
-  children?: tree[]
-  index?: number
-}
-const tData = ref<tree[]>([])
-
-function addSubTree(vendor: CanVendor, node: tree, deviceIndexMap: Map<string, number>) {
-  const canTree: tree = {
-    label: i18next.t('uds.hardware.deviceTypes.can'),
-    append: true,
-    id: vendor + 'CAN',
-    vendor: vendor,
-    type: 'can',
-    children: []
-  }
-  if (vendor != 'ecubus') {
-    node.children?.push(canTree)
-  }
-  for (const [key, value] of Object.entries(devices.devices)) {
-    if (value.type == 'can' && value.canDevice && value.canDevice.vendor == vendor) {
-      canTree.children?.push({
-        label: value.canDevice.name,
-        append: false,
-        vendor: vendor,
-        id: key,
-        type: 'can',
-        index: deviceIndexMap.get(key)
-      })
+/** Back-compat: projects created with the previous device-tree UI have `devices`
+ * entries but no `channels` wrapper yet. Auto-wrap them once on load. */
+function ensureChannelsForOrphanDevices() {
+  const wrapped = new Set(
+    Object.values(dataBase.channels)
+      .map((c) => c.deviceId)
+      .filter(Boolean)
+  )
+  for (const [deviceId, device] of Object.entries(dataBase.devices)) {
+    if (wrapped.has(deviceId)) continue
+    if (
+      device.type !== 'can' &&
+      device.type !== 'lin' &&
+      device.type !== 'eth' &&
+      device.type !== 'pwm' &&
+      device.type !== 'serial'
+    ) {
+      continue
+    }
+    const id = v4()
+    const count = Object.values(dataBase.channels).filter((c) => c.type === device.type).length
+    dataBase.channels[id] = {
+      id,
+      type: device.type,
+      name: `${BUS_TYPE_PREFIX[device.type]}${count}`,
+      deviceId
     }
   }
-  if (vendor == 'simulate') {
-    const ethTree: tree = {
-      label: i18next.t('uds.hardware.deviceTypes.ethernet'),
-      append: true,
-      id: vendor + 'Eth',
-      vendor: vendor,
-      type: 'eth',
-      children: []
-    }
-    node.children?.push(ethTree)
-    for (const [key, value] of Object.entries(devices.devices)) {
-      if (value.type == 'eth' && value.ethDevice && value.ethDevice.vendor == vendor) {
-        ethTree.children?.push({
-          label: value.ethDevice.name,
-          append: false,
-          vendor: vendor,
-          id: key,
-          type: 'eth',
-          index: deviceIndexMap.get(key)
-        })
-      }
-    }
-  }
-  const linTree: tree = {
-    label: i18next.t('uds.hardware.deviceTypes.lin'),
-    append: true,
-    id: vendor + 'LIN',
-    vendor: vendor,
-    type: 'lin',
-    children: []
-  }
-  if (
-    vendor == 'peak' ||
-    vendor == 'toomoss' ||
-    vendor == 'kvaser' ||
-    vendor == 'vector' ||
-    vendor == 'ecubus'
-  ) {
-    node.children?.push(linTree)
-  }
-  for (const [key, value] of Object.entries(devices.devices)) {
-    if (value.type == 'lin' && value.linDevice && value.linDevice.vendor == vendor) {
-      linTree.children?.push({
-        label: value.linDevice.name,
-        append: false,
-        vendor: vendor,
-        id: key,
-        type: 'lin',
-        index: deviceIndexMap.get(key)
-      })
-    }
-  }
-  const pwmTree: tree = {
-    label: i18next.t('uds.hardware.deviceTypes.pwm'),
-    append: true,
-    id: vendor + 'PWM',
-    vendor: vendor,
-    type: 'pwm',
-    children: []
-  }
-  if (vendor == 'ecubus') {
-    node.children?.push(pwmTree)
-  }
-  for (const [key, value] of Object.entries(devices.devices)) {
-    if (value.type == 'pwm' && value.pwmDevice && value.pwmDevice.vendor == vendor) {
-      pwmTree.children?.push({
-        label: value.pwmDevice.name,
-        append: false,
-        vendor: vendor,
-        id: key,
-        type: 'pwm',
-        index: deviceIndexMap.get(key)
-      })
-    }
-  }
-  const serialTree: tree = {
-    label: i18next.t('uds.hardware.deviceTypes.serial'),
-    append: true,
-    id: vendor + 'SERIAL',
-    vendor: vendor,
-    type: 'serial',
-    children: []
-  }
-  if (vendor == 'ecubus') {
-    node.children?.push(serialTree)
-  }
-  for (const [key, value] of Object.entries(devices.devices)) {
-    if (value.type == 'serial' && value.serialDevice && value.serialDevice.vendor == vendor) {
-      serialTree.children?.push({
-        label: value.serialDevice.name,
-        append: false,
-        vendor: vendor,
-        id: key,
-        type: 'serial',
-        index: deviceIndexMap.get(key)
-      })
-    }
-  }
-  // const ethTree:tree={
-  //     label:'Ethernet',
-  //     append:false,
-  //     id:vendor+'Ethernet',
-  //     type:'eth',
-  //     children:[]
-  // }
-}
-async function buildTree() {
-  const t: tree[] = []
-  const vendors: CanVendor[] = (
-    await window.electron.ipcRenderer.invoke('ipc-get-vendor', ecubusPro)
-  ).map((v: any) => v.name)
-
-  // 按照devices.devices的顺序创建索引映射
-  const deviceIndexMap = new Map<string, number>()
-  let index = 1
-  for (const key of Object.keys(devices.devices)) {
-    deviceIndexMap.set(key, index++)
-  }
-
-  if (vendors.includes('ecubus')) {
-    const ecubus: tree = {
-      label: i18next.t('uds.hardware.vendors.ecubus'),
-      vendor: 'ecubus',
-      append: false,
-      id: 'ECUBUS',
-      children: []
-    }
-    t.push(ecubus)
-    addSubTree('ecubus', ecubus, deviceIndexMap)
-  }
-
-  if (vendors.includes('zlg')) {
-    const zlg: tree = {
-      label: i18next.t('uds.hardware.vendors.zlg'),
-      vendor: 'zlg',
-      append: false,
-      id: 'ZLG',
-      children: []
-    }
-    t.push(zlg)
-    addSubTree('zlg', zlg, deviceIndexMap)
-  }
-  if (vendors.includes('peak')) {
-    const peak: tree = {
-      label: i18next.t('uds.hardware.vendors.peak'),
-      append: false,
-      id: 'PEAK',
-      vendor: 'peak',
-      children: []
-    }
-    t.push(peak)
-    addSubTree('peak', peak, deviceIndexMap)
-  }
-  if (vendors.includes('kvaser')) {
-    const kvaser: tree = {
-      label: i18next.t('uds.hardware.vendors.kvaser'),
-      vendor: 'kvaser',
-      append: false,
-      id: 'KVASER',
-
-      children: []
-    }
-    t.push(kvaser)
-    addSubTree('kvaser', kvaser, deviceIndexMap)
-  }
-  if (vendors.includes('simulate')) {
-    const simulate: tree = {
-      label: i18next.t('uds.hardware.vendors.simulate'),
-      vendor: 'simulate',
-      append: false,
-      id: 'Simulate',
-
-      children: []
-    }
-    t.push(simulate)
-    addSubTree('simulate', simulate, deviceIndexMap)
-  }
-  if (vendors.includes('toomoss')) {
-    const toomoss: tree = {
-      label: i18next.t('uds.hardware.vendors.toomoss'),
-      vendor: 'toomoss',
-      append: false,
-      id: 'TOOMOSS',
-      children: []
-    }
-    t.push(toomoss)
-    addSubTree('toomoss', toomoss, deviceIndexMap)
-  }
-  if (vendors.includes('vector')) {
-    const vector: tree = {
-      label: i18next.t('uds.hardware.vendors.vector'),
-      vendor: 'vector',
-      append: false,
-      id: 'VECTOR',
-      children: []
-    }
-    t.push(vector)
-    addSubTree('vector', vector, deviceIndexMap)
-  }
-
-  if (vendors.includes('slcan')) {
-    const slcan: tree = {
-      label: i18next.t('uds.hardware.vendors.slcan'),
-      vendor: 'slcan',
-      append: false,
-      id: 'SLCAN',
-      children: []
-    }
-    t.push(slcan)
-    addSubTree('slcan', slcan, deviceIndexMap)
-  }
-  if (vendors.includes('candle')) {
-    const candle: tree = {
-      label: i18next.t('uds.hardware.vendors.candle'),
-      vendor: 'candle',
-      append: false,
-      id: 'CANDLE',
-      children: []
-    }
-    t.push(candle)
-    addSubTree('candle', candle, deviceIndexMap)
-  }
-
-  tData.value = t
 }
 
-const layout = inject('layout') as Layout
-watch(dataModify, (val) => {
-  layout.setWinModified(winKey, val)
-})
-const deviceId = toRef(props, 'deviceId')
-watch(deviceId, (val) => {
-  if (val) {
-    const node = treeRef.value?.getNode(val)
-    if (node) {
-      treeRef.value?.setCurrentKey(val)
-      nodeClick(node.data, node)
-    }
+function focusDevice(deviceId: string) {
+  const ch = Object.values(dataBase.channels).find((c) => c.deviceId === deviceId)
+  if (ch) {
+    activeType.value = ch.type
+    nextTick(() => openDrawer(ch.type, ch.id))
+  }
+}
+
+watch(
+  () => props.deviceId,
+  (v) => {
+    if (v) focusDevice(v)
+  }
+)
+
+watch(
+  () => [dataBase.channels, dataBase.devices, dataBase.ia, dataBase.nodes],
+  () => {
+    renderType(activeType.value)
+  },
+  { deep: true }
+)
+
+watch([() => props.width, () => props.height], () => {
+  for (const t of BUS_TYPES) {
+    renderType(t)
   }
 })
-onBeforeMount(() => {
-  buildTree()
-})
+
 onMounted(() => {
-  window.jQuery(`#${winKey}Shift`).resizable({
-    handles: 'e',
-    // resize from all edges and corners
-    resize: (e, ui) => {
-      leftWidth.value = ui.size.width
-    },
-    maxWidth: 400,
-    minWidth: 220
-  })
-
-  if (deviceId.value) {
-    const node = treeRef.value?.getNode(deviceId.value)
-    if (node) {
-      treeRef.value?.setCurrentKey(deviceId.value)
-      nodeClick(node.data, node)
-    }
+  ensureChannelsForOrphanDevices()
+  for (const t of BUS_TYPES) {
+    createBoard(t)
+  }
+  loadVendorTree(activeType.value)
+  if (props.deviceId) {
+    focusDevice(props.deviceId)
   }
 })
 </script>
 <style scoped>
-.tips {
+.hw-main {
+  position: relative;
+  height: v-bind('props.height + "px"');
+  width: v-bind('props.width + "px"');
   display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
   flex-direction: column;
 }
 
-.button {
-  padding: 10px;
-  border: 2px dashed var(--el-border-color);
-  border-radius: 5px;
-  text-align: center;
-  margin: 10px;
+.hw-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 8px;
 }
 
-.button .desc {
-  font-size: 16px;
-  color: var(--el-color-info);
-  padding: 5px;
-}
-
-.button:hover {
-  cursor: pointer;
-  border: 2px dashed var(--el-color-primary-dark-2);
-}
-
-.isTop {
-  font-weight: bold;
-}
-
-.left {
-  position: absolute;
-  top: 0px;
-  left: 0px;
-  width: v-bind(leftWidth + 'px');
-  z-index: 1;
-}
-
-.shift {
-  position: absolute;
-  top: 0px;
-  left: 0px;
-  width: v-bind(leftWidth + 1 + 'px');
-  height: v-bind(h + 'px');
-  z-index: 0;
-  border-right: solid 1px var(--el-border-color);
-}
-
-/* .tree-add {
-    color: var(--el-color-primary);
-}
-
-.tree-add:hover {
-    color: var(--el-color-primary-dark-2);
-    cursor: pointer;
-}
-
-.tree-delete {
-    color: var(--el-color-danger);
-}
-
-.tree-delete:hover {
-    color: var(--el-color-danger-dark-2);
-    cursor: pointer;
-} */
-
-.shift:hover {
-  border-right: solid 4px var(--el-color-primary);
-}
-
-.shift:active {
-  border-right: solid 4px var(--el-color-primary);
-}
-
-.hardware {
-  margin: 20px;
-}
-
-.tree-node {
+.hw-tabs {
   flex: 1;
+  min-width: 0;
+}
+
+.hw-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+}
+
+.hw-tabs :deep(.el-tabs__nav-wrap::after),
+.hw-tabs :deep(.el-tabs__active-bar) {
+  display: none;
+}
+
+.hw-tabs :deep(.el-tabs__nav) {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  padding-right: 5px;
+  gap: 6px;
 }
 
-.right {
-  position: absolute;
-  left: v-bind(leftWidth + 5 + 'px');
-  width: v-bind(w - leftWidth - 6 + 'px');
-  height: v-bind(h + 'px');
-  z-index: 0;
-  overflow: auto;
-}
-
-.main {
-  position: relative;
-  height: v-bind(h + 'px');
-  width: v-bind(w + 'px');
-}
-
-.el-tabs {
-  --el-tabs-header-height: 24 !important;
-}
-
-.addr {
+.hw-tabs :deep(.el-tabs__item) {
+  height: 32px;
+  padding: 0 12px;
   border: 1px solid var(--el-border-color);
-  border-radius: 5px;
-  padding: 5px;
-  max-height: 200px;
-  min-height: 50px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  width: 100%;
-  display: block;
-  position: relative;
+  border-radius: 7px;
+  color: var(--el-text-color-regular);
 }
 
-.addrClose {
-  position: absolute;
-  right: 5px;
-  top: 5px;
-  width: 12px;
-  height: 12px;
+.hw-tabs :deep(.el-tabs__item.is-active) {
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
 }
 
-.addrClose:hover {
-  color: var(--el-color-danger);
-  cursor: pointer;
+.hw-more {
+  flex-shrink: 0;
+  min-width: 28px;
+  font-size: 18px;
+  letter-spacing: 0;
 }
 
-.subClose {
-  z-index: 100;
+.hw-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+  padding: 0 10px 10px;
 }
 
-.subClose:hover {
-  color: var(--el-color-danger);
-  cursor: pointer;
-}
-
-.param {
-  margin-right: 5px;
-  border-radius: 2px;
-}
-
-.treeLabel {
-  display: inline-block;
-  white-space: nowrap;
-  /* 保证内容不会换行 */
+.hw-side {
+  width: 196px;
+  flex: 0 0 196px;
   overflow: hidden;
-  /* 超出容器部分隐藏 */
-  text-overflow: ellipsis;
-  /* 使用省略号表示超出部分 */
-  width: v-bind(leftWidth - 100 + 'px') !important;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 7px;
+  background: var(--el-fill-color-blank);
 }
 
-.logo {
-  height: 11px;
+.hw-side-title {
+  height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 32px;
+  color: var(--el-text-color-primary);
 }
 
-.vm {
+.hw-side :deep(.el-tree-node__content) {
+  height: 30px;
+  padding-right: 6px;
+}
+
+.hw-side-node,
+.hw-side-label {
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
-.ecubus-logo {
-  height: 16px;
-  display: flex;
-  align-items: center;
+.hw-side-node {
+  flex: 1;
+  justify-content: space-between;
+}
+
+.hw-side-label {
   gap: 5px;
+  overflow: hidden;
+  font-size: 12px;
 }
 
-.ecubus-logo img {
-  height: 16px;
-  /* width: 100px; */
+.hw-side-label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.ecubus-logo span {
-  line-height: 14px;
+.hw-side-icon {
+  flex: 0 0 auto;
+  color: var(--el-color-primary);
+}
+
+.hw-side-icon.dim,
+.hw-side-serial {
+  color: var(--el-text-color-secondary);
+}
+
+.hw-side-serial {
+  font-size: 10px;
+}
+
+.hw-canvas-area {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  background: var(--el-fill-color-blank);
+}
+
+.hw-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 </style>

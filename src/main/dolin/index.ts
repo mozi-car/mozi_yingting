@@ -30,8 +30,13 @@ import { VectorLin } from './vector'
 import { LinCable } from './ecubus'
 
 const libPath = path.dirname(dllLib)
-PeakLin.loadDllPath(libPath)
-ToomossLin.loadDllPath(libPath)
+for (const loader of [PeakLin.loadDllPath, ToomossLin.loadDllPath]) {
+  try {
+    loader(libPath)
+  } catch (e) {
+    console.error('[lin] driver unavailable:', e)
+  }
+}
 
 export function openLinDevice(device: LinBaseInfo) {
   let linBase: LinBase | undefined

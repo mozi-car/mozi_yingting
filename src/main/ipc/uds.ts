@@ -49,13 +49,19 @@ import dllLib from '../../../resources/lib/zlgcan.dll?asset&asarUnpack'
 import { getLinDevices, openLinDevice } from '../dolin'
 import { updateLinSignalVal } from '../util'
 import EventEmitter from 'events'
+import * as dgram from 'dgram'
+import * as net from 'net'
 import LinBase from '../dolin/base'
 import {
   DataSet,
+  EthInter,
+  EthInterAction,
   LinInter,
   LogItem,
   NodeItem,
   PwmInter,
+  SerialInter,
+  SerialInterAction,
   SomeipAction,
   VarItem
 } from 'src/preload/data'
@@ -939,6 +945,8 @@ export function globalStop(emit = false) {
     value.socket.close()
   })
   timerMap.clear()
+  rawIaPeriodMap.forEach((t) => clearInterval(t))
+  rawIaPeriodMap.clear()
   someipPeriodMap.forEach((value, key) => {
     const client = someipMap.get(value.clientKey)
     if (client) {
@@ -1144,6 +1152,115 @@ ipcMain.on('ipc-pwm-set-duty', async (event, ...arg) => {
       pwmBase.setDutyCycle(duty)
     }
   }
+})
+
+/** Parse a hex string like "02 FD 00 00" (any non-hex separators allowed) into bytes. */
+function hexToBuffer(hex: string): Buffer {
+  return Buffer.from((hex || '').replace(/[^0-9a-fA-F]/g, ''), 'hex')
+}
+
+function serialActionToBuffer(action: SerialInterAction): Buffer {
+  if (action.encoding === 'hex') return hexToBuffer(action.payload)
+  const endings: Record<string, string> = { none: '', lf: '\n', cr: '\r', crlf: '\r\n' }
+  return Buffer.from((action.payload || '') + (endings[action.lineEnding || 'none'] || ''), 'ascii')
+}
+
+/** Runtime timers for eth/serial IA periodic actions, keyed by `${iaId}:${actionUuid}`. */
+const rawIaPeriodMap = new Map<string, NodeJS.Timeout>()
+
+function sendSerialAction(ia: SerialInter, action: SerialInterAction): void {
+  const buf = serialActionToBuffer(action)
+  if (buf.length === 0) return
+  for (const d of ia.devices) {
+    serialBaseMap.get(d)?.write(buf, action.uuid).catch((e: Error) => {
+      sysLog.error(`serial ia send failed: ${e.message}`)
+    })
+  }
+}
+
+function sendEthAction(ia: EthInter, action: EthInterAction): void {
+  const buf = hexToBuffer(action.payload)
+  if (action.protocol === 'raw') {
+    sysLog.error('eth ia: raw (L2) send is not supported')
+    return
+  }
+  if (action.protocol === 'tcp') {
+    for (const _d of ia.devices) {
+      const sock = new net.Socket()
+      sock.once('error', (e) => sysLog.error(`eth ia tcp send failed: ${e.message}`))
+      sock.connect(Number(action.dstPort || 0), action.dstIp || '127.0.0.1', () => {
+        sock.write(buf, () => sock.end())
+      })
+    }
+    return
+  }
+  // udp
+  for (const _d of ia.devices) {
+    const socket = dgram.createSocket('udp4')
+    const doSend = () => {
+      if (action.ttl) {
+        try {
+          socket.setTTL(Number(action.ttl))
+        } catch {
+          // ttl before bind on some platforms throws; ignore
+        }
+      }
+      socket.send(buf, Number(action.dstPort || 0), action.dstIp || '127.0.0.1', (e) => {
+        if (e) sysLog.error(`eth ia udp send failed: ${e.message}`)
+        socket.close()
+      })
+    }
+    // autoHeader: let the OS pick source ip/port. Otherwise bind to the configured source.
+    if (!action.autoHeader && (action.srcPort || action.srcIp)) {
+      socket.bind(Number(action.srcPort || 0), action.srcIp || undefined, doSend)
+    } else {
+      doSend()
+    }
+  }
+}
+
+function stopRawIaPeriod(key: string): void {
+  const t = rawIaPeriodMap.get(key)
+  if (t) {
+    clearInterval(t)
+    rawIaPeriodMap.delete(key)
+  }
+}
+
+ipcMain.on('ipc-send-serial', async (event, ...arg) => {
+  sendSerialAction(arg[0] as SerialInter, arg[1] as SerialInterAction)
+})
+
+ipcMain.on('ipc-send-eth', async (event, ...arg) => {
+  sendEthAction(arg[0] as EthInter, arg[1] as EthInterAction)
+})
+
+ipcMain.on('ipc-serial-start-period', (event, ...arg) => {
+  const key = arg[0] as string
+  const ia = arg[1] as SerialInter
+  const action = arg[2] as SerialInterAction
+  stopRawIaPeriod(key)
+  const period = Math.max(1, Number(action.trigger.period || 1000))
+  rawIaPeriodMap.set(
+    key,
+    setInterval(() => sendSerialAction(ia, action), period)
+  )
+})
+
+ipcMain.on('ipc-eth-start-period', (event, ...arg) => {
+  const key = arg[0] as string
+  const ia = arg[1] as EthInter
+  const action = arg[2] as EthInterAction
+  stopRawIaPeriod(key)
+  const period = Math.max(1, Number(action.trigger.period || 1000))
+  rawIaPeriodMap.set(
+    key,
+    setInterval(() => sendEthAction(ia, action), period)
+  )
+})
+
+ipcMain.on('ipc-raw-ia-stop-period', (event, ...arg) => {
+  stopRawIaPeriod(arg[0] as string)
 })
 
 function getLenByDlc(dlc: number, canFd: boolean) {

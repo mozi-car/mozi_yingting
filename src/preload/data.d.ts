@@ -62,6 +62,66 @@ export interface PwmInter {
   action: any[]
 }
 
+/**
+ * One Ethernet frame an IA can emit. The IP/UDP/TCP header fields are optional because,
+ * when `autoHeader` is on, source IP/MAC/port are filled from the bound device at send time.
+ */
+export interface EthInterAction {
+  uuid: string
+  trigger: {
+    type: 'manual' | 'periodic'
+    period?: number
+    onKey?: string
+  }
+  name: string
+  /** Transport layer: `udp`/`tcp` build an IP+L4 header; `raw` sends the payload as-is (L2). */
+  protocol: 'udp' | 'tcp' | 'raw'
+  /** When true, srcIp/srcMac/srcPort are auto-filled from the bound device; user only sets destination + payload. */
+  autoHeader: boolean
+  srcIp?: string
+  dstIp?: string
+  srcPort?: number
+  dstPort?: number
+  srcMac?: string
+  dstMac?: string
+  ttl?: number
+  /** Payload bytes as a hex string, e.g. "02 FD 00 00". */
+  payload: string
+}
+
+export interface EthInter {
+  id: string
+  name: string
+  devices: string[]
+  type: 'eth'
+  action: EthInterAction[]
+}
+
+/** One serial frame (raw byte stream) an IA can emit. */
+export interface SerialInterAction {
+  uuid: string
+  trigger: {
+    type: 'manual' | 'periodic'
+    period?: number
+    onKey?: string
+  }
+  name: string
+  /** Payload bytes as a hex string when `encoding` is `hex`, otherwise raw ASCII text. */
+  payload: string
+  encoding: 'hex' | 'ascii'
+  /** Appended line ending for ASCII/protocol framing. */
+  lineEnding?: 'none' | 'lf' | 'cr' | 'crlf'
+}
+
+export interface SerialInter {
+  id: string
+  name: string
+  devices: string[]
+  type: 'serial'
+  action: SerialInterAction[]
+}
+
+
 export interface SomeipAction {
   uuid: string
   trigger: {
@@ -107,7 +167,7 @@ export interface SomeipInter {
   action: SomeipAction[]
 }
 
-export type Inter = CanInter | LinInter | PwmInter | SomeipInter
+export type Inter = CanInter | LinInter | PwmInter | SomeipInter | EthInter | SerialInter
 export interface NodeItem {
   disabled?: boolean
   id: string
@@ -264,8 +324,24 @@ export type ReplayItem = {
   useOriginalTime?: boolean
 }
 
+/**
+ * A logical hardware channel slot shown on the hardware configuration canvas.
+ * A channel exists independently of any physical hardware mapping; once the user
+ * maps hardware to it via the channel config drawer, `deviceId` points at the
+ * matching entry in `DataSet.devices` (the actual object referenced by IA/Node bindings).
+ */
+export interface HardwareChannel {
+  id: string
+  type: 'can' | 'lin' | 'eth' | 'pwm' | 'serial'
+  name: string
+  deviceId?: string
+  /** ID in DataSet.database.can or DataSet.database.lin. */
+  databaseId?: string
+}
+
 export interface DataSet {
   devices: Record<string, UdsDevice>
+  channels: Record<string, HardwareChannel>
   tester: Record<string, TesterInfo>
   subFunction: Record<string, { name: string; subFunction: string }[]>
   nodes: Record<string, NodeItem>

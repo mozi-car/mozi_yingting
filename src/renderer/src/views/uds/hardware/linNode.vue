@@ -230,7 +230,7 @@ const data = ref<LinBaseInfo>({
     handle: '',
     id: ''
   },
-  name: '',
+  name: `${props.vendor.toLocaleUpperCase()}_LIN`,
   id: '',
   vendor: props.vendor,
   baudRate: 19200,
@@ -419,6 +419,9 @@ let watcher: any
 
 onBeforeMount(() => {
   getDevice(true)
+  if (!editIndex.value && !data.value.name) {
+    data.value.name = `${props.vendor.toLocaleUpperCase()}_${Object.keys(devices.devices).length + 1}`
+  }
   if (editIndex.value) {
     const editData = devices.devices[editIndex.value]
     if (editData && editData.type == 'lin' && editData.linDevice) {
