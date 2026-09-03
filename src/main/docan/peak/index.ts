@@ -1,4 +1,5 @@
-import peak from './../build/Release/peak.node'
+import { loadNative } from '../../native'
+const peak = loadNative('peak')
 import {
   CanAddr,
   CanDevice,
@@ -110,7 +111,7 @@ class PeakNetAddr {
     if (_msg) {
       this._msg = _msg
     } else {
-      this._msg = new peak.cantp_netaddrinfo()
+      this._msg = { msgtype: 0, format: 0, target_type: 0, source_addr: 0, target_addr: 0, extension_addr: 0 }
     }
   }
   get msgtype() {
@@ -249,13 +250,9 @@ export class CAN_MSG_BASE {
   }
   get data() {
     const len = this.msg.length
-    const buf = Buffer.alloc(len)
-    const b = peak.ByteArray.frompointer(this.msg.data)
-
-    for (let i = 0; i < len; i++) {
-      buf[i] = b.getitem(i)
-    }
-    return buf
+    // Rust exposes copied message data as a Uint8Array/Buffer. Keep the
+    // existing Buffer contract without dereferencing a SWIG pointer.
+    return Buffer.from(this.msg.data).subarray(0, len)
   }
   get netstatus() {
     return this.msg.netstatus
@@ -267,7 +264,7 @@ export class CAN_MSG_ANY extends CAN_MSG_BASE {
     if (_msg) {
       super(_msg)
     } else {
-      super(new peak.cantp_msgdata())
+      super({ flags: 0, length: 0, data: [], netstatus: 0 })
     }
   }
 }
@@ -279,7 +276,7 @@ export class CAN_MSG_ISOTP extends CAN_MSG_BASE {
       super(_msg)
       this.netaddrinfo = new PeakNetAddr(this.msg.netaddrinfo)
     } else {
-      super(new peak.cantp_msgdata_isotp())
+      super({ flags: 0, length: 0, data: [], netstatus: 0, netaddrinfo: { msgtype: 0, format: 0, target_type: 0, source_addr: 0, target_addr: 0, extension_addr: 0 } })
       this.netaddrinfo = new PeakNetAddr()
     }
   }
@@ -290,7 +287,7 @@ export class CAN_MSG_FRAME extends CAN_MSG_BASE {
     if (_msg) {
       super(_msg)
     } else {
-      super(new peak.cantp_msgdata_isotp())
+      super({ flags: 0, length: 0, data: [], netstatus: 0 })
     }
   }
 }
@@ -712,7 +709,7 @@ export class PEAK_TP extends CanBase implements CanTp {
         const result = peak.CANTP_Read_2016(
           this.handle,
           msg.msg,
-          tsClass.cast(),
+          tsClass,
           peak.PCANTP_MSGTYPE_ANY
         )
         let ts = tsClass.value()

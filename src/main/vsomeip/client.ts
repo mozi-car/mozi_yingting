@@ -1,5 +1,5 @@
-import vsomeip from './build/Release/vsomeip.node'
-import dllLib from '../../../resources/lib/vsomeip3.dll?asset&asarUnpack'
+import { loadNative } from '../native'
+const vsomeip = loadNative('vsomeip')
 import path from 'path'
 import {
   SomeipMessage,
@@ -8,11 +8,6 @@ import {
   VsomeipSubscriptionStatusInfo
 } from '../share/someip'
 
-const libPath = path.dirname(dllLib)
-
-if (process.platform == 'win32') {
-  vsomeip.LoadDll(libPath)
-}
 // vSomeIP Callback Management System TypeScript Interface
 
 // Unified callback data structure
@@ -50,8 +45,8 @@ export default class VSomeIP_Client {
     cb: (callbackData: VsomeipCallbackData) => void,
     private options: { router?: boolean } = {}
   ) {
-    this.rtm = vsomeip.runtime.get()
-    this.app = this.rtm.create_application(name, configFilePath)
+    this.rtm = vsomeip.Runtime.get()
+    this.app = this.rtm.createApplication(name, configFilePath)
     this.cb = new vsomeip.VsomeipCallbackWrapper(this.rtm, this.app)
     this.sendc = new vsomeip.Send(this.rtm, this.app)
     this.cbId = vsomeip.RegisterCallback(name, name, cb.bind(this))
@@ -93,7 +88,7 @@ export default class VSomeIP_Client {
     msg.protocolVersion = message.protocolVersion
     msg.interfaceVersion = message.interfaceVersion
     msg.reliable = message.reliable || false
-    this.sendc.start_periodic_message(taskId, msg, payload, Number(periodMs), asNotify, force)
+    this.sendc.startPeriodicMessage(taskId, msg, payload, Number(periodMs), asNotify, force)
   }
 
   updatePeriodicMessage(
@@ -115,7 +110,7 @@ export default class VSomeIP_Client {
     msg.protocolVersion = message.protocolVersion
     msg.interfaceVersion = message.interfaceVersion
     msg.reliable = message.reliable || false
-    this.sendc.update_periodic_message(taskId, msg, payload, asNotify, force)
+    this.sendc.updatePeriodicMessage(taskId, msg, payload, asNotify, force)
   }
 
   init() {
@@ -139,7 +134,7 @@ export default class VSomeIP_Client {
   }
 
   stop() {
-    this.app.clear_all_handler()
+    this.app.clearAllHandler()
 
     if (this.cb) {
       this.cb.stop()
@@ -147,6 +142,6 @@ export default class VSomeIP_Client {
 
     vsomeip.UnregisterCallback(this.cbId)
 
-    this.rtm.remove_application(this.name)
+    this.rtm.removeApplication(this.name)
   }
 }

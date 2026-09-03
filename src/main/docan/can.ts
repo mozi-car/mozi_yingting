@@ -1,6 +1,5 @@
 import { UdsDevice } from '../share/uds'
 import { PEAK_TP } from './peak'
-import dllLib from '../../../resources/lib/zlgcan.dll?asset&asarUnpack'
 import path from 'path'
 import { ZLG_CAN } from './zlg'
 import { KVASER_CAN } from './kvaser'
@@ -12,19 +11,11 @@ import { CanBase } from './base'
 import { SLCAN_CAN } from './slcan'
 import { Candle_CAN } from './candle'
 
-const libPath = path.dirname(dllLib)
-for (const loader of [
-  PEAK_TP.loadDllPath,
-  ZLG_CAN.loadDllPath,
-  KVASER_CAN.loadDllPath,
-  TOOMOSS_CAN.loadDllPath,
-  VECTOR_CAN.loadDllPath
-]) {
-  try {
-    loader(libPath)
-  } catch (e) {
-    console.error('[can] driver unavailable:', e)
-  }
+const libPath = process.env.YT_RESOURCES
+  ? path.join(process.env.YT_RESOURCES, 'resources', 'lib')
+  : path.resolve(process.cwd(), 'resources', 'lib')
+for (const loader of [PEAK_TP.loadDllPath, ZLG_CAN.loadDllPath, KVASER_CAN.loadDllPath, TOOMOSS_CAN.loadDllPath, VECTOR_CAN.loadDllPath]) {
+  try { loader(libPath) } catch (e) { console.error('[can] driver unavailable:', e) }
 }
 
 export function openCanDevice(canDevice: CanBaseInfo) {

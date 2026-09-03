@@ -77,8 +77,7 @@ export class VectorLin extends LinBase {
     if (xlStatus !== 0) {
       throw new Error(this.getError(xlStatus))
     } else {
-      const channles = VECTOR.CHANNEL_CONFIG.frompointer(DrvConfig.channel) //通道配置
-      this.channelConfig = channles.getitem(this.index) //通道数组索引
+      this.channelConfig = DrvConfig.getitem(this.index) // 通道数组索引
     }
 
     // 通道掩码计算
@@ -93,20 +92,20 @@ export class VectorLin extends LinBase {
       if (this.channelConfig.busParams.busType === 2) {
         this.PermissionMask.assign(this.channelMask)
         xlStatus = VECTOR.xlOpenPort(
-          this.PortHandle.cast(),
+          this.PortHandle,
           'yingting',
           this.channelMask,
-          this.PermissionMask.cast(),
+          this.PermissionMask,
           256,
           3,
           2
         )
         if (xlStatus !== 0) {
-          VECTOR.xlClosePort(this.PortHandle.value())
+          VECTOR.xlClosePort(this.PortHandle.value)
           throw new Error(this.getError(xlStatus))
         }
         this.portOpened = true
-        if (this.PermissionMask.value() == 0) {
+        if (this.PermissionMask.value == 0) {
           throw new Error('PermissionMask failed')
         }
 
@@ -120,7 +119,7 @@ export class VectorLin extends LinBase {
         LinStatPar.baudrate = baudRate
         LinStatPar.LINVersion = 3
         xlStatus = VECTOR.xlLinSetChannelParams(
-          this.PortHandle.value(),
+          this.PortHandle.value,
           this.channelMask,
           LinStatPar
         )
@@ -132,24 +131,24 @@ export class VectorLin extends LinBase {
         for (let j = 0; j < 64; j++) {
           LinDLC.setitem(j, 8)
         }
-        xlStatus = VECTOR.xlLinSetDLC(this.PortHandle.value(), this.channelMask, LinDLC.cast())
+        xlStatus = VECTOR.xlLinSetDLC(this.PortHandle.value, this.channelMask, LinDLC)
         if (xlStatus !== 0) {
           throw new Error(this.getError(xlStatus))
         }
 
-        xlStatus = VECTOR.xlActivateChannel(this.PortHandle.value(), this.channelMask, 2, 8)
+        xlStatus = VECTOR.xlActivateChannel(this.PortHandle.value, this.channelMask, 2, 8)
         if (xlStatus !== 0) {
           throw new Error(this.getError(xlStatus))
         }
 
-        xlStatus = VECTOR.xlFlushReceiveQueue(this.PortHandle.value())
+        xlStatus = VECTOR.xlFlushReceiveQueue(this.PortHandle.value)
         if (xlStatus !== 0) {
           throw new Error(this.getError(xlStatus))
         }
       }
 
       VECTOR.CreateTSFN(
-        this.PortHandle.value(),
+        this.PortHandle.value,
         this.info.id,
         this.callback.bind(this),
         this.channelMask,
@@ -176,8 +175,8 @@ export class VectorLin extends LinBase {
         this.tsfnCreated = false
       }
       if (this.portOpened) {
-        VECTOR.xlDeactivateChannel(this.PortHandle.value(), this.channelMask)
-        VECTOR.xlClosePort(this.PortHandle.value())
+        VECTOR.xlDeactivateChannel(this.PortHandle.value, this.channelMask)
+        VECTOR.xlClosePort(this.PortHandle.value)
         this.portOpened = false
       }
       throw error
@@ -198,12 +197,9 @@ export class VectorLin extends LinBase {
       const framedata = new VECTOR.s_xl_lin_msg()
       framedata.id = frameId
       framedata.dlc = length
-      const b = VECTOR.UINT8ARRAY.frompointer(framedata.data)
-      for (let i = 0; i < length; i++) {
-        b.setitem(i, initData[i])
-      }
+      framedata.data = [...initData.subarray(0, length)]
       xlStatus = VECTOR.xlLinSetSlave(
-        this.PortHandle.value(),
+        this.PortHandle.value,
         this.channelMask,
         framedata.id,
         framedata.data,
@@ -217,50 +213,33 @@ export class VectorLin extends LinBase {
   }
 
   async callback() {
-    let num = 100
-    let xlStatus = 0
-    const len = new VECTOR.UINT32()
-    len.assign(num)
-    const frames = new VECTOR.XLEVENT(num)
+    let recvxlevent: any
+    try {
+      recvxlevent = VECTOR.receiveLinEvent(this.PortHandle.value)
+    } catch {
+      return
+    }
+    let ts = recvxlevent.timeStamp
+    if (!this.offsetInit) {
+      this.offsetTs = ts - (getTsUs() - this.startTs)
+      this.offsetInit = true
+    }
+    ts -= this.offsetTs
 
-    xlStatus = VECTOR.xlReceive(this.PortHandle.value(), len, frames.cast())
-    if (xlStatus === 10) {
-      return
-    }
-    num = len.value()
-    if (xlStatus === 10) {
-      return
-    }
-    for (let i = 0; i < num; i++) {
-      const recvxlevent = frames.getitem(i)
-      let ts = recvxlevent.timeStamp
-      if (!this.offsetInit) {
-        this.offsetTs = ts - (getTsUs() - this.startTs)
-        this.offsetInit = true
+    if (recvxlevent.tag == 20) {
+      const data = Buffer.from(recvxlevent.data).subarray(0, recvxlevent.dlc)
+      const frameId = recvxlevent.id & 0x3f
+      const msg: LinMsg = {
+        frameId,
+        data,
+        direction: recvxlevent.flags == 0x40 ? LinDirection.SEND : LinDirection.RECV,
+        checksumType:
+          this.pendingPromise?.sendMsg.checksumType ||
+          (frameId == 0x3c || frameId == 0x3d ? LinChecksumType.CLASSIC : LinChecksumType.ENHANCED),
+        checksum: recvxlevent.crc,
+        database: this.info.database,
+        device: this.info.name
       }
-      ts -= this.offsetTs
-
-      if (recvxlevent.tag == 20) {
-        const recvMsg = recvxlevent.tagData.linMsgApi
-        const data = Buffer.alloc(recvMsg.linMsg.dlc)
-        const b = VECTOR.UINT8ARRAY.frompointer(recvMsg.linMsg.data)
-        for (let j = 0; j < recvMsg.linMsg.dlc; j++) {
-          data[j] = b.getitem(j)
-        }
-        const frameId = recvMsg.linMsg.id & 0x3f
-        const msg: LinMsg = {
-          frameId: frameId,
-          data: data,
-          direction: recvMsg.linMsg.flags == 0x40 ? LinDirection.SEND : LinDirection.RECV,
-          checksumType:
-            this.pendingPromise?.sendMsg.checksumType ||
-            (frameId == 0x3c || frameId == 0x3d
-              ? LinChecksumType.CLASSIC
-              : LinChecksumType.ENHANCED),
-          checksum: recvMsg.linMsg.crc,
-          database: this.info.database,
-          device: this.info.name
-        }
 
         let error = false
         if ((recvMsg.linMsg.flags & 0x81) == 0) {
@@ -367,34 +346,25 @@ export class VectorLin extends LinBase {
           this.pendingPromise = undefined
         }
       } else if (recvxlevent.tag == 26) {
-        const recvMsg = recvxlevent.tagData.linMsgApi
-        if (
-          this.pendingPromise &&
-          this.pendingPromise.sendMsg.frameId == (recvMsg.linCRCinfo.id & 0x3f)
-        ) {
-          if (recvMsg.linCRCinfo.flags == 0) {
-            this.pendingPromise.sendMsg.checksumType = LinChecksumType.CLASSIC
-          } else if (recvMsg.linCRCinfo.flags == 1) {
-            this.pendingPromise.sendMsg.checksumType = LinChecksumType.ENHANCED
-          }
+        if (this.pendingPromise && this.pendingPromise.sendMsg.frameId == (recvxlevent.id & 0x3f)) {
+          this.pendingPromise.sendMsg.checksumType = recvxlevent.flags === 0
+            ? LinChecksumType.CLASSIC
+            : LinChecksumType.ENHANCED
         }
-        //do nothing XL_LIN_CRCINFO
+        // XL_LIN_CRCINFO
       } else {
         this.log.error(ts, 'internal error')
       }
 
-      await new Promise((resolve) => {
-        setImmediate(() => {
-          resolve(null)
-        })
-      })
-    }
+    await new Promise((resolve) => {
+      setImmediate(resolve)
+    })
   }
 
   close() {
     VECTOR.FreeTSFN(this.info.id)
-    VECTOR.xlDeactivateChannel(this.PortHandle.value(), this.channelMask) //所选的通道退出总线。如果没有其他情况，通道将被禁用激活通道的端口。
-    VECTOR.xlClosePort(this.PortHandle.value()) //这个函数关闭一个端口并禁用它的通道
+    VECTOR.xlDeactivateChannel(this.PortHandle.value, this.channelMask) //所选的通道退出总线。如果没有其他情况，通道将被禁用激活通道的端口。
+    VECTOR.xlClosePort(this.PortHandle.value) //这个函数关闭一个端口并禁用它的通道
   }
 
   async _write(m: LinMsg): Promise<number> {
@@ -405,10 +375,7 @@ export class VectorLin extends LinBase {
       framedata.dlc = Math.min(m.data.length, 8)
       const checksum = new VECTOR.UINT16()
       checksum.assign(m.checksumType == LinChecksumType.CLASSIC ? 0x100 : 0x200)
-      const b = VECTOR.UINT8ARRAY.frompointer(framedata.data)
-      for (let i = 0; i < framedata.dlc; i++) {
-        b.setitem(i, m.data[i])
-      }
+      framedata.data = [...m.data.subarray(0, framedata.dlc)]
       if (this.info.mode == LinMode.MASTER) {
         //主机模式
         if (this.pendingPromise != undefined) {
@@ -418,12 +385,12 @@ export class VectorLin extends LinBase {
         if (m.direction == LinDirection.SEND) {
           //发送
           xlStatus = VECTOR.xlLinSetSlave(
-            this.PortHandle.value(),
+            this.PortHandle.value,
             this.channelMask,
             framedata.id,
             framedata.data,
             framedata.dlc,
-            checksum.value()
+            checksum.value
           )
 
           if (xlStatus !== 0) {
@@ -431,7 +398,7 @@ export class VectorLin extends LinBase {
           }
 
           xlStatus = VECTOR.xlLinSwitchSlave(
-            this.PortHandle.value(),
+            this.PortHandle.value,
             this.channelMask,
             framedata.id,
             0xff
@@ -441,19 +408,19 @@ export class VectorLin extends LinBase {
           }
         } else {
           xlStatus = VECTOR.xlLinSetSlave(
-            this.PortHandle.value(),
+            this.PortHandle.value,
             this.channelMask,
             framedata.id,
             framedata.data,
             framedata.dlc,
-            checksum.value()
+            checksum.value
           )
 
           if (xlStatus !== 0) {
             throw new Error(this.getError(xlStatus))
           }
           xlStatus = VECTOR.xlLinSwitchSlave(
-            this.PortHandle.value(),
+            this.PortHandle.value,
             this.channelMask,
             framedata.id,
             0x00
@@ -463,7 +430,7 @@ export class VectorLin extends LinBase {
           }
         }
         xlStatus = VECTOR.xlLinSendRequest(
-          this.PortHandle.value(),
+          this.PortHandle.value,
           this.channelMask,
           framedata.id,
           0
@@ -481,12 +448,12 @@ export class VectorLin extends LinBase {
       } else {
         //从机模式
         xlStatus = VECTOR.xlLinSetSlave(
-          this.PortHandle.value(),
+          this.PortHandle.value,
           this.channelMask,
           framedata.id,
           framedata.data,
           framedata.dlc,
-          checksum.value()
+          checksum.value
         )
         if (xlStatus !== 0) {
           reject(new LinError(LIN_ERROR_ID.LIN_PARAM_ERROR, m, this.getError(xlStatus)))
@@ -503,7 +470,7 @@ export class VectorLin extends LinBase {
   }
 
   wakeup() {
-    const xlStatus = VECTOR.wakeup(this.PortHandle.value(), this.channelMask)
+    const xlStatus = VECTOR.wakeup(this.PortHandle.value, this.channelMask)
     if (xlStatus !== 0) {
       throw new LinError(LIN_ERROR_ID.LIN_INTERNAL_ERROR, undefined, this.getError(xlStatus))
     }
@@ -522,10 +489,9 @@ export class VectorLin extends LinBase {
       const ret = VECTOR.xlGetDriverConfig(deviceHandle) //获取/打印硬件配置g_xlDrvConfig
 
       if (ret === 0) {
-        const channles = VECTOR.CHANNEL_CONFIG.frompointer(deviceHandle.channel) //通道配置
         for (let num = 0; num < deviceHandle.channelCount; num++) {
-          //设备通道循环索引
-          const channel = channles.getitem(num) //通道数组索引
+          // 设备通道循环索引
+          const channel = deviceHandle.getitem(num)
           const channelName = channel.name.replace(/\0/g, '') //通道名称
 
           if (channel.busParams.busType !== 2) {
@@ -537,7 +503,7 @@ export class VectorLin extends LinBase {
           devices.push({
             label: `${channelName}${busType}`, //'VN1640A Channel 1#LIN' = 通道名称#总线类型
             id: `VECTOR_${num}_${busType}`, //'VECTOR_0_#LIN' = 通道索引_#总线类型
-            handle: `${channel.hwChannel}:${num}` //'0:0' = 第几路总线：通道索引
+            handle: `${channel.hwType}_${channel.hwIndex}:${channel.channelIndex}_${channel.hwChannel}`
           })
         }
       }

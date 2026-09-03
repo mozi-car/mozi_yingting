@@ -45,7 +45,6 @@ import { createPwmDevice, getValidPwmDevices, PwmBase } from '../pwm'
 import { SerialBase } from '../serial'
 
 import { getCanDevices, openCanDevice } from '../docan/can'
-import dllLib from '../../../resources/lib/zlgcan.dll?asset&asarUnpack'
 import { getLinDevices, openLinDevice } from '../dolin'
 import { updateLinSignalVal } from '../util'
 import EventEmitter from 'events'
@@ -94,13 +93,15 @@ import { BlfReader } from '../replay/blfReader'
 import { AscReader } from '../replay/ascReader'
 import { trackEvent } from '../analytics'
 
-const libPath = path.dirname(dllLib)
+const libPath = process.env.YT_RESOURCES
+  ? path.join(process.env.YT_RESOURCES, 'resources', 'lib')
+  : path.resolve(process.cwd(), 'resources', 'lib')
 
 let monitor: IntervalHistogram | undefined
 let timer: NodeJS.Timeout | undefined
 let startTs = 0
 
-log.info('dll lib path:', libPath)
+log.info('Rust native resource path:', libPath)
 
 ipcMain.on('ipc-service-detail', (event, arg) => {
   event.returnValue = serviceDetail
@@ -269,11 +270,7 @@ ipcMain.handle('ipc-get-can-devices', async (event, ...arg) => {
 })
 
 ipcMain.handle('ipc-get-eth-devices', async (event, ...arg) => {
-  const vendor = arg[0].toUpperCase()
-  if (vendor == 'SIMULATE') {
-    return getEthDevices()
-  }
-  return []
+  return getEthDevices(arg[0])
 })
 
 ipcMain.handle('ipc-get-lin-devices', async (event, ...arg) => {

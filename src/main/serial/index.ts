@@ -1,5 +1,5 @@
-import { SerialPort, SerialPortOpenOptions } from 'serialport'
-import type { AutoDetectTypes } from '@serialport/bindings-cpp'
+import { SerialPort, SerialPortOpenOptions } from '../serial/rust'
+type AutoDetectTypes = string
 import EventEmitter from 'events'
 import { getTsUs } from '../share/can'
 import { SerialBaseInfo, SerialMessage } from '../share/serial'

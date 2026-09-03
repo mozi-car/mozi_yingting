@@ -29,10 +29,13 @@
         <div class="hw-side-title">{{ i18next.t('uds.hardware.side.title') }}</div>
         <el-scrollbar :height="canvasHeight() - 30 + 'px'">
           <el-tree
+            ref="vendorTreeRef"
             :data="vendorTree"
             node-key="id"
             :expand-on-click-node="false"
-            default-expand-all
+            :default-expanded-keys="expandedKeys"
+            @node-expand="rememberExpanded"
+            @node-collapse="rememberCollapsed"
           >
             <template #default="{ node, data }">
               <div class="hw-side-node">
@@ -86,7 +89,7 @@
   </div>
 </template>
 <script lang="ts" setup>
-import { ref, inject, onMounted, watch, nextTick, h } from 'vue'
+import { ref, inject, onMounted, onBeforeUnmount, watch, nextTick, h } from 'vue'
 import * as joint from '@joint/core'
 import { Icon } from '@iconify/vue'
 import { ElMessageBox } from 'element-plus'
@@ -131,7 +134,7 @@ const layout = inject('layout') as Layout
 const TAB_LABELS: Record<BusType, string> = {
   can: 'CAN',
   lin: 'LIN',
-  eth: 'ETH · DoIP',
+  eth: 'ETH',
   pwm: 'PWM',
   serial: 'Serial'
 }
@@ -150,6 +153,29 @@ interface VendorTreeNode {
   children?: VendorTreeNode[]
 }
 const vendorTree = ref<VendorTreeNode[]>([])
+const vendorTreeRef = ref<any>()
+const expandedByType = new Map<BusType, Set<string>>()
+const expandedKeys = ref<string[]>([])
+let hardwareRefreshTimer: ReturnType<typeof setInterval> | undefined
+let hardwareLoadSerial = 0
+
+function rememberExpanded(node: { data?: VendorTreeNode }) {
+  const id = node.data?.id
+  if (!id) return
+  const keys = expandedByType.get(activeType.value) ?? new Set<string>()
+  keys.add(id)
+  expandedByType.set(activeType.value, keys)
+  expandedKeys.value = [...keys]
+}
+
+function rememberCollapsed(node: { data?: VendorTreeNode }) {
+  const id = node.data?.id
+  if (!id) return
+  const keys = expandedByType.get(activeType.value) ?? new Set<string>()
+  keys.delete(id)
+  expandedByType.set(activeType.value, keys)
+  expandedKeys.value = [...keys]
+}
 
 const DEVICE_IPC: Record<BusType, string> = {
   can: 'ipc-get-can-devices',
@@ -161,6 +187,7 @@ const DEVICE_IPC: Record<BusType, string> = {
 
 /** Loads the always-visible vendor/driver list (and any detected hardware) for the active bus type. */
 async function loadVendorTree(t: BusType) {
+  const loadSerial = ++hardwareLoadSerial
   let vendors: CanVendor[] = []
   try {
     vendors = (await window.electron.ipcRenderer.invoke('ipc-get-vendor', ecubusPro)).map(
@@ -169,6 +196,10 @@ async function loadVendorTree(t: BusType) {
   } catch {
     vendors = []
   }
+  // PC is the host-machine provider for generic Ethernet and serial ports.
+  // Keep it separate from simulation; hardware-backed vendors are enumerated
+  // by their own driver in the child nodes below.
+  if ((t === 'eth' || t === 'serial') && !vendors.includes('pc')) vendors.push('pc')
   const supported = vendors.filter((v) => vendorSupportsType(v, t))
   const nodes: VendorTreeNode[] = []
   for (const vendor of supported) {
@@ -198,7 +229,23 @@ async function loadVendorTree(t: BusType) {
     }
     nodes.push(node)
   }
-  if (activeType.value === t) vendorTree.value = nodes
+  if (activeType.value === t && loadSerial === hardwareLoadSerial) {
+    const keys = expandedByType.get(t)
+    if (!keys) {
+      const initial = new Set(nodes.filter((node) => node.kind === 'vendor').map((node) => node.id))
+      expandedByType.set(t, initial)
+      expandedKeys.value = [...initial]
+    } else {
+      // Preserve an explicit collapse while dropping keys for vendors no
+      // longer present after a driver/device refresh.
+      const available = new Set(nodes.map((node) => node.id))
+      for (const key of [...keys]) if (!available.has(key)) keys.delete(key)
+      expandedKeys.value = [...keys]
+    }
+    vendorTree.value = nodes
+    await nextTick()
+    vendorTreeRef.value?.setExpandedKeys?.(expandedKeys.value)
+  }
 }
 
 function addChannelForVendor(vendor: CanVendor) {
@@ -345,9 +392,24 @@ function buildChannelVMs(type: BusType): ChannelVM[] {
     }
     const summary = getDeviceSummary(device)
     const hasIa = children.some((child) => child.kind === 'ia')
+    const canDevice = device?.canDevice
+    const canVendorNode = canDevice
+      ? vendorTree.value.find((node) => node.id === `${type}:${canDevice.vendor}`)
+      : undefined
+    const detectedCanName = canVendorNode?.children?.find((child) =>
+      child.id.endsWith(`:${String(canDevice?.handle)}`)
+    )?.label
+    const hardwareName =
+      canDevice?.hardwareName ||
+      detectedCanName ||
+      device?.linDevice?.label ||
+      device?.ethDevice?.device?.label ||
+      device?.serialDevice?.device?.label
     return {
       id: c.id,
-      name: c.name,
+      // Channel cards show the driver-reported hardware name once configured;
+      // the editable channel label remains only for an unconfigured channel.
+      name: hardwareName || c.name,
       configured: !!c.deviceId,
       summary: c.deviceId
         ? {
@@ -595,9 +657,16 @@ onMounted(() => {
     createBoard(t)
   }
   loadVendorTree(activeType.value)
+  hardwareRefreshTimer = setInterval(() => {
+    void loadVendorTree(activeType.value)
+  }, 2000)
   if (props.deviceId) {
     focusDevice(props.deviceId)
   }
+})
+
+onBeforeUnmount(() => {
+  if (hardwareRefreshTimer) clearInterval(hardwareRefreshTimer)
 })
 </script>
 <style scoped>

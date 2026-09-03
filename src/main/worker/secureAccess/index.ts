@@ -1,47 +1,16 @@
 // Lazy-load sa.node so importing this module does not crash when the native
 // binary is absent (e.g. published main-plugin-sdk has no sa.node).
+import { loadNative } from '../../native'
+
 let saNode: any
 
 function getStubSaNode() {
   return {
     SeedKey: class {
-      constructor() {}
-      IsLoaded() {
-        return false
-      }
-      LoadDLL() {
-        throw new Error('SecureAccessDll is only available on Windows platform')
-      }
-      GenerateKeyExOpt() {
-        throw new Error('SecureAccessDll is only available on Windows platform')
-      }
-      GenerateKeyEx() {
-        throw new Error('SecureAccessDll is only available on Windows platform')
-      }
-    },
-    UINT8_ARRAY: class {
-      constructor() {}
-      setitem() {}
-      cast() {
-        return this
-      }
-    },
-    INT8_ARRAY: class {
-      constructor() {}
-      setitem() {}
-      cast() {
-        return this
-      }
-    },
-    UINT32_PTR: class {
-      constructor() {}
-      assign() {}
-      value() {
-        return 0
-      }
-      cast() {
-        return this
-      }
+      IsLoaded() { return false }
+      LoadDLL() { throw new Error('SecureAccessDll is only available on Windows platform') }
+      GenerateKeyExOpt() { throw new Error('SecureAccessDll is only available on Windows platform') }
+      GenerateKeyEx() { throw new Error('SecureAccessDll is only available on Windows platform') }
     }
   }
 }
@@ -52,7 +21,7 @@ function getSaNode() {
   }
   if (process.platform == 'win32') {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    saNode = require('./build/Release/sa.node')
+    saNode = loadNative('sa')
   } else {
     saNode = getStubSaNode()
   }
@@ -103,43 +72,7 @@ export class SecureAccessDll {
     key: Buffer
   ): Buffer {
     const native = getSaNode()
-    const seedArray = new native.UINT8_ARRAY(ipSeedArray.length)
-    for (let i = 0; i < ipSeedArray.length; i++) {
-      seedArray.setitem(i, ipSeedArray.readUInt8(i))
-    }
-    const variant = new native.INT8_ARRAY(ipVariant.length)
-    for (let i = 0; i < ipVariant.length; i++) {
-      variant.setitem(i, ipVariant.readInt8(i))
-    }
-    const options = new native.INT8_ARRAY(ipOptions.length)
-    for (let i = 0; i < ipOptions.length; i++) {
-      options.setitem(i, ipOptions.readInt8(i))
-    }
-    const KeyArray = new native.UINT8_ARRAY(key.length)
-    for (let i = 0; i < key.length; i++) {
-      KeyArray.setitem(i, key.readUInt8(i))
-    }
-    const KeySize = new native.UINT32_PTR()
-    KeySize.assign(key.length)
-    const ret = this._ref.GenerateKeyExOpt(
-      seedArray.cast(),
-      ipSeedArray.length,
-      iSecurityLevel,
-      variant.cast(),
-      options.cast(),
-      KeyArray.cast(),
-      key.length,
-      KeySize.cast()
-    )
-    if (ret == 0) {
-      const retBuf = Buffer.alloc(KeySize.value())
-      for (let i = 0; i < KeySize.value(); i++) {
-        retBuf[i] = KeyArray.getitem(i)
-      }
-      return retBuf
-    } else {
-      throw new Error(`GenerateKeyExOpt failed with error code ${ret}`)
-    }
+    return this._ref.GenerateKeyExOpt(ipSeedArray, iSecurityLevel, ipVariant, ipOptions, key)
   }
   /**
    * Generates a key with extended options.
@@ -168,39 +101,7 @@ export class SecureAccessDll {
     key: Buffer
   ): Buffer {
     const native = getSaNode()
-    const seedArray = new native.UINT8_ARRAY(ipSeedArray.length)
-    for (let i = 0; i < ipSeedArray.length; i++) {
-      seedArray.setitem(i, ipSeedArray.readUInt8(i))
-    }
-    const variant = new native.INT8_ARRAY(ipVariant.length)
-    for (let i = 0; i < ipVariant.length; i++) {
-      variant.setitem(i, ipVariant.readInt8(i))
-    }
-
-    const KeyArray = new native.UINT8_ARRAY(key.length)
-    for (let i = 0; i < key.length; i++) {
-      KeyArray.setitem(i, key.readUInt8(i))
-    }
-    const KeySize = new native.UINT32_PTR()
-    KeySize.assign(key.length)
-    const ret = this._ref.GenerateKeyEx(
-      seedArray.cast(),
-      ipSeedArray.length,
-      iSecurityLevel,
-      variant.cast(),
-      KeyArray.cast(),
-      key.length,
-      KeySize.cast()
-    )
-    if (ret == 0) {
-      const retBuf = Buffer.alloc(KeySize.value())
-      for (let i = 0; i < KeySize.value(); i++) {
-        retBuf[i] = KeyArray.getitem(i)
-      }
-      return retBuf
-    } else {
-      throw new Error(`GenerateKeyEx failed with error code ${ret}`)
-    }
+    return this._ref.GenerateKeyEx(ipSeedArray, iSecurityLevel, ipVariant, key)
   }
   private loadDll(dllPath: string) {
     this._ref.LoadDLL(dllPath)

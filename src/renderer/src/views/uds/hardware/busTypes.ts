@@ -27,11 +27,11 @@ export function vendorSupportsType(vendor: CanVendor, type: BusType): boolean {
         vendor == 'peak' || vendor == 'toomoss' || vendor == 'kvaser' || vendor == 'vector' || vendor == 'ecubus'
       )
     case 'eth':
-      return vendor === 'simulate'
+      return vendor === 'simulate' || vendor === 'vector' || vendor === 'pc'
     case 'pwm':
       return vendor === 'ecubus'
     case 'serial':
-      return vendor === 'ecubus'
+      return vendor === 'pc'
     default:
       return false
   }

@@ -29,8 +29,22 @@ fn sidecar_command_path() -> std::path::PathBuf {
 }
 
 /// 优先使用打包资源内路径（release），否则回退开发路径
+fn normalize_resource_path(path: std::path::PathBuf) -> std::path::PathBuf {
+    #[cfg(windows)]
+    {
+        let text = path.to_string_lossy();
+        if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+            return std::path::PathBuf::from(format!(r"\\{}", rest));
+        }
+        if let Some(rest) = text.strip_prefix(r"\\?\") {
+            return std::path::PathBuf::from(rest);
+        }
+    }
+    path
+}
+
 fn resolve_runtime(app: &AppHandle) -> (std::path::PathBuf, std::path::PathBuf) {
-    let res = app.path().resource_dir();
+    let res = app.path().resource_dir().map(normalize_resource_path);
     eprintln!("[bridge] resource_dir = {:?}", res);
     if let Ok(res) = res {
         #[cfg(windows)]
@@ -61,13 +75,31 @@ fn sidecar_command(app: &AppHandle) -> Command {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::inherit());
     cmd.stdin(Stdio::piped());
-    cmd.env(
-        "YT_RESOURCES",
-        cjs.parent()
-            .and_then(|p| p.parent())
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| std::path::PathBuf::from(".")),
-    );
+    let sidecar_root = cjs.parent().unwrap_or_else(|| std::path::Path::new("."));
+    cmd.env("YT_NATIVE_DIR", sidecar_root.join("native"));
+    let resource_root = if sidecar_root.ends_with("sidecar") {
+        let parent = sidecar_root.parent().unwrap_or_else(|| std::path::Path::new("."));
+        // Dev layout: <project>/out/sidecar -> project root.
+        // Packaged layout: <bundle>/sidecar -> bundle resource root.
+        // Asset imports append "resources/...", so YT_RESOURCES must be the
+        // directory containing the resources folder, not resources itself.
+        if parent.file_name().and_then(|n| n.to_str()) == Some("out") {
+            parent.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| std::path::PathBuf::from("."))
+        } else {
+            parent.to_path_buf()
+        }
+    } else {
+        std::env::current_dir()
+            .map(|cwd| {
+                if cwd.file_name().and_then(|n| n.to_str()) == Some("src-tauri") {
+                    cwd.parent().unwrap_or(&cwd).to_path_buf()
+                } else {
+                    cwd
+                }
+            })
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+    };
+    cmd.env("YT_RESOURCES", resource_root);
     cmd
 }
 
@@ -103,7 +135,15 @@ impl SidecarBridge {
             Some("emit") => {
                 let params = v.get("params").cloned().unwrap_or_else(|| json!([]));
                 let channel = params.get(0).and_then(|c| c.as_str()).unwrap_or("");
-                let payload = params.get(1).cloned().unwrap_or(Value::Null);
+                // Electron webContents.send supports variadic payloads. Keep
+                // all arguments so the renderer shim can restore
+                // (event, ...args) instead of silently dropping arguments 2+.
+                let payload = Value::Array(
+                    params
+                        .as_array()
+                        .map(|values| values.iter().skip(1).cloned().collect())
+                        .unwrap_or_default(),
+                );
                 let _ = self.app.emit(
                     "yt-sidecar-event",
                     json!({ "channel": channel, "payload": payload }),
@@ -181,12 +221,15 @@ pub async fn rpc_invoke(
     channel: String,
     args: Value,
 ) -> Result<Value, String> {
+    // The renderer shim wraps Electron's variadic arguments as { args: [...] }.
+    // Unwrap that envelope before forwarding to the sidecar RPC protocol.
+    let forwarded_args = args.get("args").cloned().unwrap_or(args);
     // 原生对话框在 Rust 侧处理（sidecar 无 UI）
-    if let Some(v) = native_dialog(&bridge.app, &channel, &args) {
+    if let Some(v) = native_dialog(&bridge.app, &channel, &forwarded_args) {
         return Ok(v);
     }
     let bridge = Arc::clone(&bridge);
-    tauri::async_runtime::spawn_blocking(move || bridge.invoke(&channel, &args))
+    tauri::async_runtime::spawn_blocking(move || bridge.invoke(&channel, &forwarded_args))
         .await
         .map_err(|e| e.to_string())?
 }

@@ -52,7 +52,7 @@ process.on('message', (message: any) => {
       break
     }
     case 'requestService': {
-      instance?.app.request_service(
+      instance?.app.requestService(
         Number(data.service),
         Number(data.instance),
         data.major ? Number(data.major) : 0,
@@ -103,24 +103,24 @@ process.on('message', (message: any) => {
       break
     }
     case 'stopPeriodicMessage': {
-      instance?.sendc.stop_periodic_message(String(data.taskId))
+      instance?.sendc.stopPeriodicMessage(String(data.taskId))
       break
     }
     case 'offerServices': {
       for (const e of data.services) {
-        instance?.app.offer_service(Number(e.service), Number(e.instance))
+        instance?.app.offerService(Number(e.service), Number(e.instance))
       }
       break
     }
     case 'stopOfferServices': {
       for (const e of data.services) {
-        instance?.app.stop_offer_service(Number(e.service), Number(e.instance))
+        instance?.app.stopOfferService(Number(e.service), Number(e.instance))
       }
       break
     }
     case 'releaseServices': {
       for (const e of data.services) {
-        instance?.app.release_service(Number(e.service), Number(e.instance))
+        instance?.app.releaseService(Number(e.service), Number(e.instance))
       }
       break
     }

@@ -10,7 +10,8 @@ import {
   LinMode,
   LinMsg
 } from '../../share/lin'
-import LIN from '../build/Release/toomossLin.node'
+import { loadNative } from '../../native'
+const LIN = loadNative('toomossLin')
 import { v4 } from 'uuid'
 import { queue, QueueObject } from 'async'
 import { LinLOG } from 'src/main/log'
@@ -147,10 +148,7 @@ export class ToomossLin extends LinBase {
       entry.PID = getPID(frameId)
       entry.DataLen = length
       if (dir == LinDirection.SEND) {
-        const ia = LIN.ByteArray.frompointer(entry.Data)
-        for (let i = 0; i < length; i++) {
-          ia.setitem(i, initData[i])
-        }
+        entry.Data = [...initData]
       }
       const result = LIN.LIN_EX_SlaveSetIDMode(this.handle, this.deviceIndex, entry, 1)
       if (result != 0) {

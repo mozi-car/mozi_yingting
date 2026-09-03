@@ -4,6 +4,7 @@
  * - 输出 out/cli/myt.cjs（与 EcuBus-Pro cli/out/ecb_cli.js 对齐）
  */
 import esbuild from 'esbuild'
+import { execFileSync } from 'node:child_process'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
@@ -52,10 +53,9 @@ const rawPlugin = {
 const nativePlugin = {
   name: 'yt-native',
   setup(build) {
-    build.onResolve({ filter: /\.node$/ }, (args) => ({
-      path: args.path,
-      namespace: 'yt-native'
-    }))
+    build.onResolve({ filter: /\.node$/ }, (args) => {
+      throw new Error(`Legacy .node import forbidden; migrate ${args.path} to Rust native loader`)
+    })
     build.onLoad({ filter: /.*/, namespace: 'yt-native' }, (args) => {
       const abs = args.path
       return {
@@ -87,7 +87,7 @@ await esbuild.build({
   outfile: path.join(root, 'out/cli/myt.cjs'),
   sourcemap: true,
   banner: { js: '#!/usr/bin/env node' },
-  external: ['electron-updater', '@serialport/bindings-cpp'],
+  external: ['electron-updater'],
   alias: {
     electron: path.join(root, 'src/main/electron-shim.ts'),
     '@electron-toolkit/utils': path.join(root, 'src/main/toolkit-shim.ts'),
@@ -102,13 +102,29 @@ await esbuild.build({
   logLevel: 'warning'
 })
 
-// serialport 原生 addon 无法 bundle，随包携带 node_modules 供运行时 require
+// The CLI is a separately deployed entrypoint, so it needs the same Rust
+// addons as the sidecar. Rebuild first when the CLI is invoked directly.
+const nativeSrc = path.join(root, 'out/sidecar/native')
+execFileSync(process.execPath, [path.join(root, 'scripts/build-native.mjs')], { cwd: root, stdio: 'inherit' })
+const cliNativeDst = path.join(root, 'out/cli/native')
+fs.rmSync(cliNativeDst, { recursive: true, force: true })
+fs.mkdirSync(cliNativeDst, { recursive: true })
+for (const file of fs.readdirSync(nativeSrc).filter((name) => name.endsWith('.node'))) {
+  fs.copyFileSync(path.join(nativeSrc, file), path.join(cliNativeDst, file))
+}
+// The deployed resources/lib/myt script resolves native addons relative to its
+// own directory. Keep a synchronized resource copy for pnpm/CLI deployments.
+const resourceNativeDst = path.join(root, 'resources/lib/native')
+fs.rmSync(resourceNativeDst, { recursive: true, force: true })
+fs.mkdirSync(resourceNativeDst, { recursive: true })
+for (const file of fs.readdirSync(nativeSrc).filter((name) => name.endsWith('.node'))) {
+  fs.copyFileSync(path.join(nativeSrc, file), path.join(resourceNativeDst, file))
+}
+
+// No native C/C++ serial dependency is copied into the CLI package.
 const nmDst = path.join(root, 'out/cli/node_modules')
 fs.rmSync(nmDst, { recursive: true, force: true })
-fs.cpSync(path.join(root, 'node_modules/@serialport'), path.join(nmDst, '@serialport'), {
-  recursive: true
-})
-for (const dep of ['ms', 'debug', 'node-gyp-build']) {
+for (const dep of ['ms', 'debug']) {
   fs.cpSync(path.join(root, 'node_modules', dep), path.join(nmDst, dep), { recursive: true })
 }
 

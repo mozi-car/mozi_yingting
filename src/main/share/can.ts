@@ -23,10 +23,13 @@ export type CanVendor =
   | 'slcan'
   | 'ecubus'
   | 'candle'
+  | 'pc'
 export interface CanBaseInfo {
   id: string
   handle: any
   name: string
+  /** Driver-reported hardware/channel name; distinct from the user label. */
+  hardwareName?: string
   vendor: CanVendor
   canfd: boolean
   bitrate: CanBitrate

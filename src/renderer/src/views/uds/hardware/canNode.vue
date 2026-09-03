@@ -987,6 +987,17 @@ function getBaudrateSP(speed: CanBitrate, index: number) {
 const deviceList = ref<CanDevice[]>([])
 const deviceLoading = ref(false)
 
+// Keep the hardware identity separate from the user-editable channel label.
+// The graph uses hardwareName so a configured channel is shown as VN5620
+// Channel 5 instead of an arbitrary name typed into the form.
+watch(
+  [() => data.value.handle, deviceList],
+  ([handle]) => {
+    const selected = deviceList.value.find((device) => device.handle === handle)
+    if (selected) data.value.hardwareName = selected.label
+  }
+)
+
 // Sync clock frequency from the selected candle device's actual hardware capability.
 // Watches both deviceList (async load) and handle (user selection) for candle devices only.
 /** Pick the best (tseg1, tseg2, prescaler) for candle hardware that exactly matches freq */
@@ -1363,6 +1374,8 @@ const onSubmit = () => {
   ruleFormRef.value?.validate((valid) => {
     if (valid) {
       data.value.vendor = props.vendor
+      const selected = deviceList.value.find((device) => device.handle === data.value.handle)
+      if (selected) data.value.hardwareName = selected.label
       if (editIndex.value == '') {
         const id = v4()
         data.value.id = id

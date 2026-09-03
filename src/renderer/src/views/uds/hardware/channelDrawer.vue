@@ -148,6 +148,9 @@ async function loadVendors() {
   allVendors.value = (await window.electron.ipcRenderer.invoke('ipc-get-vendor', ecubusPro)).map(
     (v: any) => v.name
   )
+  if ((props.busType === 'eth' || props.busType === 'serial') && !allVendors.value.includes('pc')) {
+    allVendors.value.push('pc')
+  }
 }
 
 watch(

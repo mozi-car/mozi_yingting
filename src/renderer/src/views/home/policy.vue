@@ -4,7 +4,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import license from './../../../../../license.txt?raw'
+import license from '../../../../../LICENSE?raw'
 </script>
 <style scoped>
 .container {

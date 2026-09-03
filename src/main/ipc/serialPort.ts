@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { SerialPort } from 'serialport'
+import { SerialPort } from '../serial/rust'
 import { SerialDevice } from '../share/serial'
 
 ipcMain.handle('ipc-get-serial-port-list', async (event, ...arg) => {

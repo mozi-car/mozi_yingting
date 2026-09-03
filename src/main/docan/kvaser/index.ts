@@ -12,7 +12,8 @@ import { EventEmitter } from 'events'
 import { cloneDeep, set } from 'lodash'
 import { addrToId, CanError } from '../../share/can'
 import { CanLOG } from '../../log'
-import KV from './../build/Release/kvaser.node'
+import { loadNative } from '../../native'
+const KV = loadNative('kvaser')
 import { v4 } from 'uuid'
 import { CanBase } from '../base'
 import { LinDevice } from 'nodeCan/lin'
@@ -207,11 +208,11 @@ export class KVASER_CAN extends CanBase {
       const data = new KV.ByteArray(64)
       const ret = KV.canRead(
         this.handle,
-        id.cast(),
-        data.cast(),
-        dlc.cast(),
-        flag.cast(),
-        time.cast()
+        id,
+        data,
+        dlc,
+        flag,
+        time
       )
       if (ret == KV.canERR_NOMSG) {
         break
@@ -292,7 +293,7 @@ export class KVASER_CAN extends CanBase {
 
           //read bus status
           const status = new KV.JSUINT64()
-          const err = KV.canReadStatus(this.handle, status.cast())
+          const err = KV.canReadStatus(this.handle, status)
           if (err != 0) {
             this.close(false, err2str(err))
           } else {
@@ -346,12 +347,10 @@ export class KVASER_CAN extends CanBase {
         KV.canUnloadLibrary()
         KV.canInitializeLibrary()
       }
-      const tsClass = new KV.JSINT32()
-      const status = KV.canGetNumberOfChannels(tsClass.cast())
-      if (status != 0) {
-        throw new Error(err2str(status))
+      const num = KV.canGetNumberOfChannels()
+      if (num < 0) {
+        throw new Error(err2str(num))
       }
-      const num = tsClass.value()
       const devices: CanDevice[] = []
       for (let i = 0; i < num; i++) {
         const buf = Buffer.alloc(1024)
@@ -376,12 +375,10 @@ export class KVASER_CAN extends CanBase {
         KV.canUnloadLibrary()
         KV.canInitializeLibrary()
       }
-      const tsClass = new KV.JSINT32()
-      const status = KV.canGetNumberOfChannels(tsClass.cast())
-      if (status != 0) {
-        throw new Error(err2str(status))
+      const num = KV.canGetNumberOfChannels()
+      if (num < 0) {
+        throw new Error(err2str(num))
       }
-      const num = tsClass.value()
       const devices: LinDevice[] = []
       for (let i = 0; i < num; i++) {
         const buf = Buffer.alloc(1024)
@@ -527,7 +524,7 @@ export class KVASER_CAN extends CanBase {
           array.setitem(i, data[i])
         }
 
-        const res = KV.canWrite(this.handle, id, array.cast(), data.length, flag)
+        const res = KV.canWrite(this.handle, id, array, data.length, flag)
         if (res != 0) {
           this.pendingBaseCmds.get(cmdId)?.pop()
           const str = err2str(res)

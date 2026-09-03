@@ -1,0 +1,37 @@
+{
+  "generatedAt": "2026-09-03T05:25:53.367Z",
+  "platform": "win32",
+  "scope": "Vector VN5620 hardware discovery and CAN channel lifecycle smoke with YT_VECTOR_E2E=1",
+  "vendorDll": "resources/lib/vxlapi64.dll",
+  "results": {
+    "LoadDll_IsLoaded": true,
+    "xlOpenDriver": 0,
+    "xlGetDriverConfig": 0,
+    "hardware": {
+      "device": "VN5620",
+      "serialNumber": 13455,
+      "physicalChannels": 9,
+      "canChannels": [
+        { "name": "VN5620 Channel 5", "channelIndex": 4, "channelMask": 16, "hwChannel": 4, "channelCapabilities": 3791650839, "channelBusCapabilities": 65537 },
+        { "name": "VN5620 Channel 6", "channelIndex": 5, "channelMask": 32, "hwChannel": 5, "channelCapabilities": 3791650839, "channelBusCapabilities": 65537 }
+      ],
+      "virtualChannels": 2
+    },
+    "channel5": {
+      "xlOpenPort": 0,
+      "xlCanSetChannelParams(500k)": 0,
+      "xlActivateChannel": 0,
+      "xlCanTransmitEx(test-frame-0x123)": 118,
+      "xlCanReceive": 112,
+      "xlDeactivateChannel": 0,
+      "xlClosePort": 0
+    },
+    "xlCloseDriver": 0
+  },
+  "interpretation": {
+    "connection": "VN5620 was found; Channel 5 opened, configured and activated successfully.",
+    "transmit": "Vendor returned 118 for the test frame, so no successful bus transmit is claimed.",
+    "receive": "Vendor returned 112 and no frame was available; no successful bus receive or callback is claimed.",
+    "notVerified": ["successful CAN frame transmit", "successful CAN frame receive", "timestamp correlation", "callback delivery", "bus error injection", "reconnect/multi-device lifecycle"]
+  }
+}

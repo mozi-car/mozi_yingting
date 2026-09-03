@@ -1,4 +1,5 @@
 mod bridge;
+mod hardware;
 
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
@@ -41,6 +42,7 @@ pub fn run() {
                 app.state::<PendingOpen>().0.lock().unwrap().replace(f);
             }
             bridge::register(app);
+            hardware::start(app.handle());
             Ok(())
         })
         .manage(PendingOpen(Mutex::new(None)))

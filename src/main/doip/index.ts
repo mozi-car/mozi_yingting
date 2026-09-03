@@ -18,33 +18,61 @@ import { TesterInfo } from '../share/tester'
 import { findService } from '../docan/uds'
 import fs from 'fs'
 import path from 'path'
+import { loadNative } from '../native'
 
 // DoIP v3 TLS port
 const DOIP_TLS_PORT = 3496
 // DoIP default port
 const DOIP_TCP_PORT = 13400
 
-export function getEthDevices() {
+export function getEthDevices(vendor?: string) {
   const ifaces = os.networkInterfaces()
   const ethDevices: EthDevice[] = []
   if (!ifaces) return ethDevices
+  const requestedVendor = vendor?.toUpperCase()
+  if (requestedVendor === 'VECTOR') return getVectorEthernetDevices()
+  if (requestedVendor === 'SIMULATE') return []
   for (const [name, iface] of Object.entries(ifaces)) {
-    //just ethernet devices
-    if (iface) {
-      for (const eth of iface) {
-        if (eth.family === 'IPv4') {
-          ethDevices.push({
-            label: name,
-            id: eth.mac,
-            handle: eth.address,
-            detail: eth
-          })
-          break
-        }
+    if (!iface) continue
+    for (const eth of iface) {
+      if (eth.family === 'IPv4' && !eth.internal) {
+        ethDevices.push({
+          label: name,
+          id: eth.mac,
+          handle: eth.address,
+          detail: eth
+        })
+        break
       }
     }
   }
   return ethDevices
+}
+
+function getVectorEthernetDevices(): EthDevice[] {
+  if (process.platform !== 'win32') return []
+  try {
+    const vector = loadNative<any>('vector')
+    const channels = vector.listEthernetChannels() as Array<{
+      name: string
+      hwType: number
+      hwIndex: number
+      hwChannel: number
+      channelIndex: number
+      channelMask: number
+      serialNumber: number
+    }>
+    return channels.map((channel) => ({
+      label: `${channel.name} (Vector Ethernet)`,
+      id: `VECTOR_ETH_${channel.serialNumber}_${channel.channelIndex}`,
+      // This is a hardware channel identity, not an arbitrary host NIC. The
+      // DoIP form can retain it for Vector-specific Ethernet integrations.
+      handle: `vector://${channel.hwType}_${channel.hwIndex}:${channel.channelIndex}_${channel.hwChannel}`,
+      detail: undefined
+    }))
+  } catch {
+    return []
+  }
 }
 
 export enum PayloadType {

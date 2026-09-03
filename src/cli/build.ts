@@ -1,4 +1,3 @@
-import dllLib from '../../resources/lib/zlgcan.dll?asset&asarUnpack'
 import esbuild from '../../resources/bin/esbuild.exe?asset&asarUnpack'
 
 // Disable javascript-obfuscator banner/advertisement messages
@@ -19,7 +18,7 @@ import { DataSet } from 'src/preload/data'
 import { compileTsc, getBuildStatus } from 'src/main/docan/uds'
 import { exit } from 'process'
 
-const libPath = path.dirname(dllLib)
+const libPath = path.resolve(process.cwd(), 'resources', 'lib')
 
 export interface BuildOptions {
   isTest?: boolean

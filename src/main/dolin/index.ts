@@ -1,7 +1,6 @@
 import { applyBuffer, getRxPdu, getTxPdu, ServiceItem, UdsDevice } from '../share/uds'
-import { PeakLin } from './peak'
-import dllLib from '../../../resources/lib/zlgcan.dll?asset&asarUnpack'
 import path from 'path'
+import { PeakLin } from './peak'
 import {
   getFrameData,
   getPID,
@@ -29,13 +28,11 @@ import { KvaserLin } from './kvaser'
 import { VectorLin } from './vector'
 import { LinCable } from './ecubus'
 
-const libPath = path.dirname(dllLib)
+const libPath = process.env.YT_RESOURCES
+  ? path.join(process.env.YT_RESOURCES, 'resources', 'lib')
+  : path.resolve(process.cwd(), 'resources', 'lib')
 for (const loader of [PeakLin.loadDllPath, ToomossLin.loadDllPath]) {
-  try {
-    loader(libPath)
-  } catch (e) {
-    console.error('[lin] driver unavailable:', e)
-  }
+  try { loader(libPath) } catch (e) { console.error('[lin] driver unavailable:', e) }
 }
 
 export function openLinDevice(device: LinBaseInfo) {

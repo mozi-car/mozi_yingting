@@ -10,7 +10,8 @@ import {
   LinMode,
   LinMsg
 } from '../../share/lin'
-import LIN from '../build/Release/kvaserLin.node'
+import { loadNative } from '../../native'
+const LIN = loadNative('kvaserLin')
 import { v4 } from 'uuid'
 import { queue, QueueObject } from 'async'
 import { LinLOG } from 'src/main/log'
@@ -53,7 +54,7 @@ export class KvaserLin extends LinBase {
       const minor = new LIN.IntPointer()
       const build = new LIN.IntPointer()
 
-      const result = LIN.linGetVersion(major.cast(), minor.cast(), build.cast())
+      const result = LIN.linGetVersion(major, minor, build)
       if (result == 0) {
         return `${major.value()}.${minor.value()}.${build.value()}`
       } else {

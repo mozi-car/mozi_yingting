@@ -56,9 +56,7 @@ const nativePlugin = {
   name: 'yt-native',
   setup(build) {
     build.onResolve({ filter: /\.node$/ }, (args) => {
-      const abs = path.resolve(args.resolveDir, args.path)
-      nativeFiles.add(abs)
-      return { path: abs, namespace: 'yt-native' }
+      throw new Error(`Legacy .node import forbidden; migrate ${args.path} to Rust native loader`)
     })
     build.onLoad({ filter: /.*/, namespace: 'yt-native' }, (args) => {
       const abs = args.path
@@ -94,7 +92,7 @@ await esbuild.build({
   outfile: path.join(root, 'out/sidecar/index.cjs'),
   sourcemap: true,
   // 全量打包依赖（release 无 node_modules），仅外置原生/平台相关
-  external: ['electron-updater', '@serialport/bindings-cpp'],
+  external: ['electron-updater'],
   alias: {
     electron: path.join(root, 'src/main/electron-shim.ts'),
     '@electron-toolkit/utils': path.join(root, 'src/main/toolkit-shim.ts'),
@@ -110,23 +108,18 @@ await esbuild.build({
 })
 
 const nativeDst = path.join(root, 'out/sidecar/native')
-fs.rmSync(nativeDst, { recursive: true, force: true })
 fs.mkdirSync(nativeDst, { recursive: true })
 for (const nativeFile of nativeFiles) {
   if (!fs.existsSync(nativeFile)) {
     console.warn(`[sidecar] native addon missing, skipped: ${nativeFile}`)
     continue
   }
-  fs.copyFileSync(nativeFile, path.join(nativeDst, path.basename(nativeFile)))
+  const destination = path.join(nativeDst, path.basename(nativeFile))
+  if (path.resolve(nativeFile) !== path.resolve(destination)) fs.copyFileSync(nativeFile, destination)
 }
 
-// serialport 原生 addon（bindings-cpp）无法 bundle，随包携带整个 @serialport 目录（含 bindings-interface 等）供运行时 require
-const bindingsSrc = path.join(root, 'node_modules/@serialport')
-const bindingsDst = path.join(root, 'out/sidecar/node_modules/@serialport')
-fs.rmSync(bindingsDst, { recursive: true, force: true })
-fs.cpSync(bindingsSrc, bindingsDst, { recursive: true })
-// bindings-cpp 的依赖闭包（ms / debug / node-gyp-build）也随包携带
-for (const dep of ['ms', 'debug', 'node-gyp-build']) {
+// No legacy native serial closure is copied into the sidecar.
+for (const dep of ['ms', 'debug']) {
   fs.cpSync(path.join(root, 'node_modules', dep), path.join(root, 'out/sidecar/node_modules', dep), {
     recursive: true
   })

@@ -1,4 +1,4 @@
-import { SerialPort } from 'serialport'
+import { SerialPort } from '../serial/rust'
 import type { ORTIFile } from 'src/renderer/src/database/ortiParse'
 import { Worker } from 'worker_threads'
 import { OsEvent } from '../share/osEvent'

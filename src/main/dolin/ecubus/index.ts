@@ -1,4 +1,4 @@
-import { SerialPort } from 'serialport'
+import { SerialPort } from '../../serial/rust'
 import {
   getCheckSum,
   getPID,
@@ -12,7 +12,8 @@ import {
   LinMode,
   LinMsg
 } from '../../share/lin'
-import LIN from '../build/Release/peakLin.node'
+import { loadNative } from '../../native'
+const LIN = loadNative('peakLin')
 import { v4 } from 'uuid'
 import { queue, QueueObject } from 'async'
 import { LinLOG } from 'src/main/log'

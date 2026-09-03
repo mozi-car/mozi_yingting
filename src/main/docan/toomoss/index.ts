@@ -13,7 +13,8 @@ import { EventEmitter } from 'events'
 import { cloneDeep } from 'lodash'
 import { addrToId, CanError } from '../../share/can'
 import { CanLOG } from '../../log'
-import TOOMOSS from './../build/Release/toomoss.node'
+import { loadNative } from '../../native'
+const TOOMOSS = loadNative('toomoss')
 import { platform } from 'os'
 import { CanBase } from '../base'
 

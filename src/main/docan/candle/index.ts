@@ -14,7 +14,8 @@ import { EventEmitter } from 'events'
 import { cloneDeep } from 'lodash'
 import { addrToId, CanError } from '../../share/can'
 import { CanLOG } from '../../log'
-import Candle from './../build/Release/candle.node'
+import { loadNative } from '../../native'
+const Candle = loadNative('candle')
 import { platform } from 'os'
 import { CanBase } from '../base'
 
@@ -79,19 +80,9 @@ export class Candle_CAN extends CanBase {
     this.devicePath = parts[0]
     this.channel = parseInt(parts[1], 10)
 
-    const readList = new Candle.candle_list_t()
-    Candle.candle_list_scan(readList)
-
-    const devicesx = Candle.DeviceArray.frompointer(readList.dev)
-    const devicesArray: any[] = []
-    for (let i = 0; i < readList.num_devices; i++) {
-      const dev = devicesx.getitem(i)
-      devicesArray.push(dev)
-    }
-
+    const devicesArray: any[] = Candle.scanDevices()
     const targetDevice = devicesArray.find((device) => {
-      const devPath = Candle.GetDevicePath(device)
-      return devPath === this.devicePath && device.interfaceNumber === this.channel
+      return device.path === this.devicePath && device.interfaceNumber === this.channel
     })
 
     if (!targetDevice) {
@@ -224,9 +215,9 @@ export class Candle_CAN extends CanBase {
         )
       }
       const bittiming = new Candle.candle_bittiming_t()
-      bittiming.prop_seg = 1
-      bittiming.phase_seg1 = this.info.bitrate.timeSeg1 - 1
-      bittiming.phase_seg2 = this.info.bitrate.timeSeg2
+      bittiming.propSeg = 1
+      bittiming.phaseSeg1 = this.info.bitrate.timeSeg1 - 1
+      bittiming.phaseSeg2 = this.info.bitrate.timeSeg2
       bittiming.sjw = this.info.bitrate.sjw
       bittiming.brp = this.info.bitrate.preScaler
 
@@ -248,7 +239,7 @@ export class Candle_CAN extends CanBase {
       )
 
       if (getSuccess) {
-        const currentResState = currentRes[0] === 1
+        const currentResState = currentRes.getitem(0) === 1
         const configResState = this.info.candleRes
 
         // Only perform the set operation when the configuration value is inconsistent with the hardware state
@@ -318,9 +309,9 @@ export class Candle_CAN extends CanBase {
           )
         }
         const bittimingfd = new Candle.candle_bittiming_t()
-        bittimingfd.prop_seg = 1
-        bittimingfd.phase_seg1 = this.info.bitratefd.timeSeg1 - 1
-        bittimingfd.phase_seg2 = this.info.bitratefd.timeSeg2
+        bittimingfd.propSeg = 1
+        bittimingfd.phaseSeg1 = this.info.bitratefd.timeSeg1 - 1
+        bittimingfd.phaseSeg2 = this.info.bitratefd.timeSeg2
         bittimingfd.sjw = this.info.bitratefd.sjw
         bittimingfd.brp = this.info.bitratefd.preScaler
         if (!Candle.candle_channel_set_data_timing(this.target, this.channel, bittimingfd)) {
@@ -333,7 +324,7 @@ export class Candle_CAN extends CanBase {
 
       // flag |= (1 << 12)
 
-      const ts = new Candle.TS()
+      const ts = new Candle.Uint8Array(8)
 
       if (!Candle.candle_dev_get_timestamp_us(this.target, ts.cast())) {
         // throw new Error('Get timestamp failed')
@@ -528,17 +519,9 @@ export class Candle_CAN extends CanBase {
   static getRawDeviceList() {
     const list: any[] = []
     if (process.platform == 'win32') {
-      const readList = new Candle.candle_list_t()
-      const ret = Candle.candle_list_scan(readList)
+      const devicesArray: any[] = Candle.scanDevices()
 
-      if (ret && readList.num_devices > 0) {
-        const devicesx = Candle.DeviceArray.frompointer(readList.dev)
-        // Convert device array to plain JS array
-        const devicesArray: any[] = []
-        for (let i = 0; i < readList.num_devices; i++) {
-          devicesArray.push(devicesx.getitem(i))
-        }
-        // Sort by interfaceNumber in ascending order
+      if (devicesArray.length > 0) {
         devicesArray.sort((a, b) => a.interfaceNumber - b.interfaceNumber)
 
         // 按排序后的顺序添加到列表
@@ -570,8 +553,8 @@ export class Candle_CAN extends CanBase {
         // pathStr = pathStr.replace(/\{.*\}/g, '')
         // pathStr = pathStr.replace(/\{.*/g, '')
         // 直接使用设备对象获取友好名称
-        const pathStr = Candle.GetDevicePath(device)
-        const friendlyNameStr = Candle.GetDeviceFriendlyName(device)
+        const pathStr = device.path
+        const friendlyNameStr = device.friendlyName
 
         // Extract capability info from device bt_const (already populated during scan)
         const cap = device.bt_const
@@ -742,22 +725,11 @@ export class Candle_CAN extends CanBase {
         if (msgType.remote) {
           canId += 0x40000000 // CANDLE_ID_RTR
         }
-        frame.can_id = canId
+        frame.canId = canId
         frame.channel = this.channel
         // 设置 DLC (Data Length Code)
-        if (msgType.canfd) {
-          const dataArray = Candle.Uint8Array.frompointer(frame.msg.canfd.data)
-          for (let i = 0; i < data.length; i++) {
-            dataArray.setitem(i, data[i])
-          }
-          frame.can_dlc = getDlcByLen(data.length, true)
-        } else {
-          const dataArray = Candle.Uint8Array.frompointer(frame.msg.classic_can.data)
-          for (let i = 0; i < data.length; i++) {
-            dataArray.setitem(i, data[i])
-          }
-          frame.can_dlc = data.length
-        }
+        frame.data = [...data]
+        frame.canDlc = msgType.canfd ? getDlcByLen(data.length, true) : data.length
 
         // 设置通道号
         frame.channel = this.channel

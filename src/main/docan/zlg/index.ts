@@ -13,7 +13,8 @@ import { EventEmitter } from 'events'
 import { cloneDeep, set } from 'lodash'
 import { addrToId, CanError } from '../../share/can'
 import { CanLOG } from '../../log'
-import ZLG from './../build/Release/zlg.node'
+import { loadNative } from '../../native'
+const ZLG = loadNative('zlg')
 import { platform } from 'os'
 import { CanBase } from '../base'
 
@@ -157,7 +158,8 @@ export class ZLG_CAN extends CanBase {
     }
     const cfg = new ZLG.ZCAN_CHANNEL_INIT_CONFIG()
     cfg.can_type = canFdAbility ? 1 : 0
-    cfg.info.can.mode = 0
+    cfg.can_mode = 0
+    cfg.sync()
 
     this.channel = ZLG.ZCAN_InitCAN(this.handle, this.deviceIndex, cfg)
     const numHandle = new ZLG.U32Array(2)
@@ -250,19 +252,15 @@ export class ZLG_CAN extends CanBase {
       return
     }
     const frames = new ZLG.ReceiveDataArray(num)
-    const ret = ZLG.ZCAN_Receive(this.channel, frames.cast(), num, 0)
+    const ret = ZLG.ZCAN_Receive(this.channel, frames, num, 0)
     if (ret > 0) {
       for (let i = 0; i < ret; i++) {
         if (this.closed) {
           return
         }
         const frame = frames.getitem(i)
-        const id = frame.frame.can_id
-        const data = Buffer.alloc(frame.frame.can_dlc)
-        const b = ZLG.ByteArray.frompointer(frame.frame.data)
-        for (let j = 0; j < frame.frame.can_dlc; j++) {
-          data[j] = b.getitem(j)
-        }
+        const id = frame.canId
+        const data = Buffer.from(frame.data)
         const jsFrame: CANFrame = {
           canId: id & 0x1fffffff,
           msgType: {
@@ -272,7 +270,7 @@ export class ZLG_CAN extends CanBase {
             remote: id & 0x40000000 ? true : false
           },
           data: data,
-          isEcho: frame.frame.__pad & 0x20 ? true : false
+          isEcho: frame.flags & 0x20 ? true : false
         }
         this._read(jsFrame, frame.timestamp)
         //让出时间片
@@ -291,19 +289,15 @@ export class ZLG_CAN extends CanBase {
       return
     }
     const frames = new ZLG.ReceiveFDDataArray(num)
-    const ret = ZLG.ZCAN_ReceiveFD(this.channel, frames.cast(), num, 0)
+    const ret = ZLG.ZCAN_ReceiveFD(this.channel, frames, num, 0)
     if (ret > 0) {
       for (let i = 0; i < ret; i++) {
         if (this.closed) {
           return
         }
         const frame = frames.getitem(i)
-        const id = frame.frame.can_id
-        const data = Buffer.alloc(frame.frame.len)
-        const b = ZLG.ByteArray.frompointer(frame.frame.data)
-        for (let j = 0; j < data.length; j++) {
-          data[j] = b.getitem(j)
-        }
+        const id = frame.canId
+        const data = Buffer.from(frame.data)
         const jsFrame: CANFrame = {
           canId: id & 0x1fffffff,
           msgType: {
@@ -313,7 +307,7 @@ export class ZLG_CAN extends CanBase {
             remote: id & 0x40000000 ? true : false
           },
           data: data,
-          isEcho: frame.frame.flags & 0x20 ? true : false
+          isEcho: frame.flags & 0x20 ? true : false
         }
         this._read(jsFrame, frame.timestamp)
         //让出时间片
@@ -331,6 +325,10 @@ export class ZLG_CAN extends CanBase {
   }
   static override getValidDevices(): CanDevice[] {
     if (process.platform == 'win32') {
+      // ZLG 5620 is exposed by the vendor SDK as the USBCANFD-400U family.
+      // Keep the complete channel set, but do not advertise it when the DLL
+      // could not be loaded (otherwise the GUI shows phantom devices).
+      if (!ZLG.IsLoaded()) return []
       const zcanArray: CanDevice[] = [
         {
           label: 'ZCAN_USBCANFD_200U_INDEX_0_CHANNEL_0',
@@ -468,7 +466,25 @@ export class ZLG_CAN extends CanBase {
           handle: `${ZLG.ZCAN_USBCANFD_400U}_1_3`
         }
       ]
-      return zcanArray
+      // The SDK does not provide a portable enumerate call. Probe each
+      // configured device type/index and only expose channels whose device
+      // handle can actually be opened. This prevents phantom channels while
+      // preserving the vendor's channel naming scheme.
+      const availableDevices = new Set<string>()
+      for (const item of zcanArray) {
+        const [typeText, indexText] = item.handle.split('_')
+        const key = `${typeText}_${indexText}`
+        if (availableDevices.has(key)) continue
+        const handle = ZLG.ZCAN_OpenDevice(Number(typeText), Number(indexText), 0)
+        if (handle) {
+          availableDevices.add(key)
+          ZLG.ZCAN_CloseDevice(handle)
+        }
+      }
+      return zcanArray.filter((item) => {
+        const [typeText, indexText] = item.handle.split('_')
+        return availableDevices.has(`${typeText}_${indexText}`)
+      })
     }
     return []
   }
@@ -579,25 +595,11 @@ export class ZLG_CAN extends CanBase {
           const frame = new ZLG.ZCAN_TransmitFD_Data()
           frame.transmit_type = 0
           let rid = id
-
-          if (msgType.idType == CAN_ID_TYPE.EXTENDED) {
-            rid += 0x80000000
-          }
-          if (msgType.remote) {
-            rid += 0x40000000
-          }
-          frame.frame.can_id = rid
-          //TX_ECHO_FLAG
-          frame.frame.flags |= 0x20
-          if (msgType.brs) {
-            frame.frame.flags |= 0x01
-          }
-          frame.frame.len = data.length
-          const b = ZLG.ByteArray.frompointer(frame.frame.data)
-
-          for (let i = 0; i < data.length; i++) {
-            b.setitem(i, data[i])
-          }
+          if (msgType.idType == CAN_ID_TYPE.EXTENDED) rid += 0x80000000
+          if (msgType.remote) rid += 0x40000000
+          let flags = 0x20
+          if (msgType.brs) flags |= 0x01
+          frame.setFrame(rid >>> 0, data, flags)
           const len = ZLG.ZCAN_TransmitFD(this.channel, frame, 1)
           if (len != 1) {
             this.pendingBaseCmds.get(cmdId)?.pop()
@@ -610,25 +612,10 @@ export class ZLG_CAN extends CanBase {
           const frame = new ZLG.ZCAN_Transmit_Data()
           frame.transmit_type = 0
           let rid = id
-
-          if (msgType.idType == CAN_ID_TYPE.EXTENDED) {
-            rid += 0x80000000
-          }
-          if (msgType.remote) {
-            rid += 0x40000000
-          }
-          frame.frame.can_id = rid
-          //TX_ECHO_FLAG
-          frame.frame.__pad = 0x20
-          if (this.canMiniBug) {
-            frame.frame.__pad = 0x00
-          }
-          frame.frame.can_dlc = data.length
-          const b = ZLG.ByteArray.frompointer(frame.frame.data)
-
-          for (let i = 0; i < data.length; i++) {
-            b.setitem(i, data[i])
-          }
+          if (msgType.idType == CAN_ID_TYPE.EXTENDED) rid += 0x80000000
+          if (msgType.remote) rid += 0x40000000
+          const pad = this.canMiniBug ? 0 : 0x20
+          frame.setFrame(rid >>> 0, data, pad)
           const len = ZLG.ZCAN_Transmit(this.channel, frame, 1)
           if (len != 1) {
             this.pendingBaseCmds.get(cmdId)?.pop()
@@ -656,7 +643,7 @@ export class ZLG_CAN extends CanBase {
   getError() {
     const errInfo = new ZLG.ZCAN_CHANNEL_ERR_INFO()
     ZLG.ZCAN_ReadChannelErrInfo(this.channel, errInfo)
-    const errCode = errInfo.error_code
+    const errCode = errInfo.errorCode
     let msg = ''
     if (errCode & 0x0001) {
       msg += 'ZCAN_ERROR_CAN_OVERFLOW '

@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-09-03T05:45:00Z",
+  "path": [
+    "renderer canNode.getDevice(true)",
+    "Tauri rpc_invoke",
+    "sidecar ipc-get-can-devices",
+    "VECTOR_CAN.getValidDevices",
+    "Rust vector.node LoadDll(directory)",
+    "vxlapi64.dll xlOpenDriver/xlGetDriverConfig"
+  ],
+  "requests": [
+    { "channel": "ipc-get-can-devices", "argument": "VECTOR" },
+    { "channel": "ipc-get-eth-devices", "argument": "VECTOR" }
+  ],
+  "response": {
+    "can": [
+      { "label": "VN5620 Channel 5#CAN", "id": "VECTOR_4_#CAN", "handle": "66_0:4_4", "serialNumber": 13455 },
+      { "label": "VN5620 Channel 6#CAN", "id": "VECTOR_5_#CAN", "handle": "66_0:5_5", "serialNumber": 13455 }
+    ],
+    "eth": [
+      { "label": "VN5620 Channel 1 (Vector Ethernet)", "id": "VECTOR_ETH_13455_0", "handle": "vector://66_0:0_0" },
+      { "label": "VN5620 Channel 2 (Vector Ethernet)", "id": "VECTOR_ETH_13455_1", "handle": "vector://66_0:1_1" },
+      { "label": "VN5620 Channel 3 (Vector Ethernet)", "id": "VECTOR_ETH_13455_2", "handle": "vector://66_0:2_2" },
+      { "label": "VN5620 Channel 4 (Vector Ethernet)", "id": "VECTOR_ETH_13455_3", "handle": "vector://66_0:3_3" },
+      { "label": "VN5620 Channel 8 (Vector Ethernet)", "id": "VECTOR_ETH_13455_7", "handle": "vector://66_0:7_7" },
+      { "label": "VN5620 Channel 9 (Vector Ethernet)", "id": "VECTOR_ETH_13455_8", "handle": "vector://66_0:8_8" }
+    ]
+  },
+  "result": "GUI enumeration backend now returns VN5620 CAN and Vector Ethernet channels; renderer canNode/ethNode use these exact IPC requests.",
+  "remaining": "Visual browser assertion and successful CAN frame TX/RX require running the packaged GUI with the target project and a CAN bus peer."
+}

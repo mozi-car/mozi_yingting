@@ -798,7 +798,9 @@ onMounted(() => {
 }
 
 .menu-item {
-  width: 50px;
+  box-sizing: border-box;
+  width: 70px;
+  min-width: 70px;
   height: 60px;
   display: flex;
   flex-direction: column;
@@ -831,6 +833,8 @@ onMounted(() => {
 
 .menu-item span {
   font-size: 14px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 .menu-item svg {

@@ -10,7 +10,8 @@ import {
   LinMode,
   LinMsg
 } from '../../share/lin'
-import LIN from '../build/Release/peakLin.node'
+import { loadNative } from '../../native'
+const LIN = loadNative('peakLin')
 import { v4 } from 'uuid'
 import { queue, QueueObject } from 'async'
 import { LinLOG } from 'src/main/log'
@@ -110,10 +111,7 @@ export class PeakLin extends LinBase {
     entry.Direction = dir == LinDirection.SEND ? 1 : dir == LinDirection.RECV ? 2 : 3
     entry.ChecksumType = checksumType == LinChecksumType.CLASSIC ? 1 : 2
     entry.Flags = flag
-    const ia = LIN.ByteArray.frompointer(entry.InitialData)
-    for (let i = 0; i < length; i++) {
-      ia.setitem(i, initData[i])
-    }
+    entry.InitialData = [...initData.subarray(0, length)]
     const result = LIN.LIN_SetFrameEntry(this.client, this.info.device.handle, entry)
     if (result != 0) {
       throw new LinError(LIN_ERROR_ID.LIN_PARAM_ERROR, undefined, err2Str(result))
@@ -132,11 +130,7 @@ export class PeakLin extends LinBase {
 
       if (recvMsg.Type == 0) {
         //mstStandard
-        const a = new LIN.ByteArray.frompointer(recvMsg.Data)
-        const data = Buffer.alloc(recvMsg.Length)
-        for (let i = 0; i < recvMsg.Length; i++) {
-          data[i] = a.getitem(i)
-        }
+        const data = Buffer.from(recvMsg.Data).subarray(0, recvMsg.Length)
 
         const msg: LinMsg = {
           device: this.info.name,
@@ -304,11 +298,7 @@ export class PeakLin extends LinBase {
           return
         }
         if (m.direction == LinDirection.SEND) {
-          const a = LIN.ByteArray.frompointer(msg.Data)
-          for (let i = 0; i < msg.Length; i++) {
-            // msg.Data.setitem(i,data[i])
-            a.setitem(i, m.data[i])
-          }
+          msg.Data = [...m.data.subarray(0, msg.Length)]
           result = LIN.LIN_CalculateChecksum(msg)
           if (result != 0) {
             reject(new LinError(LIN_ERROR_ID.LIN_PARAM_ERROR, m, err2Str(result)))
@@ -343,23 +333,19 @@ export class PeakLin extends LinBase {
         entry.ChecksumType = m.checksumType == LinChecksumType.CLASSIC ? 1 : 2
         entry.Length = m.data.length
         entry.Flags = LIN.FRAME_FLAG_RESPONSE_ENABLE | LIN.FRAME_FLAG_IGNORE_INIT_DATA
-        result = LIN.LIN_SetFrameEntry(this.info.device.handle, entry)
+        result = LIN.LIN_SetFrameEntry(this.client, this.info.device.handle, entry)
         if (result != 0) {
           reject(new LinError(LIN_ERROR_ID.LIN_PARAM_ERROR, m, err2Str(result)))
           return
         }
         //update entry
-        const a = new LIN.ByteArray(m.data.length)
-        for (let i = 0; i < m.data.length; i++) {
-          a.setitem(i, m.data[i])
-        }
         result = LIN.LIN_UpdateByteArray(
           this.client,
           this.info.device.handle,
           m.frameId,
           0,
           m.data.length,
-          a.cast()
+          Buffer.from(m.data)
         )
         if (result != 0) {
           reject(new LinError(LIN_ERROR_ID.LIN_PARAM_ERROR, m, err2Str(result)))
@@ -392,13 +378,10 @@ export class PeakLin extends LinBase {
   static getValidDevices(): LinDevice[] {
     const devices: LinDevice[] = []
     if (process.platform == 'win32') {
-      const dd = new LIN.HLINHW_JS(100)
-      const count = new LIN.INT_JS()
-      const result = LIN.LIN_GetAvailableHardware(dd.cast(), 100, count.cast())
+      const handles = LIN.LIN_GetAvailableHardware()
 
-      if (result == 0) {
-        for (let i = 0; i < count.value(); i++) {
-          const handle = dd.getitem(i)
+      if (handles) {
+        for (const handle of handles) {
           const labelBuffer = Buffer.alloc(256)
           LIN.LIN_GetHardwareParam(handle, LIN.hwpName, labelBuffer)
           devices.push({
@@ -418,7 +401,7 @@ export class PeakLin extends LinBase {
   private registerClient() {
     const clientName = v4()
     const client = new LIN.HLINCLIENT_JS()
-    const result = LIN.LIN_RegisterClient(clientName, 0, client.cast())
+    const result = LIN.LIN_RegisterClient(clientName, 0, client)
     if (result != 0) {
       throw new LinError(LIN_ERROR_ID.LIN_PARAM_ERROR, undefined, err2Str(result))
     }

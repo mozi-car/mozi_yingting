@@ -1,4 +1,4 @@
-import { SerialPort } from 'serialport'
+import { SerialPort } from '../../serial/rust'
 import { PwmDevice, PwmBaseInfo } from '../../share/uds'
 import { v4 } from 'uuid'
 import EventEmitter from 'events'

@@ -1,4 +1,4 @@
-import { SerialPort } from 'serialport'
+import { SerialPort } from '../../serial/rust'
 import {
   CanAddr,
   CanBaseInfo,

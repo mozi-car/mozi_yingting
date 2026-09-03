@@ -5,29 +5,29 @@ import fs from 'fs'
 import path from 'path'
 import { exec, execSync, spawn } from 'child_process'
 import { promisify } from 'util'
-import dllFile from '../../../resources/lib/libusb-1.0.dll?asset&asarUnpack'
+import cliBin from '../../../resources/lib/myt?asset&asarUnpack'
 
 const execAsync = promisify(exec)
-const dllPath = path.dirname(dllFile)
-const cli_bin = path.join(dllPath, 'myt')
+const cli_bin = process.execPath
+const cli_args = (args: string[]) => [cliBin, ...args]
 
 // 执行命令的工具函数
 async function execCommand(command: string, cwd: string) {
   return new Promise((resolve, reject) => {
-    const [cmd, ...args] = command.split(' ')
-    const process = spawn(cmd, args, { cwd })
+    const [subcommand, ...args] = command.split(' ')
+    const child = spawn(cli_bin, cli_args([subcommand, ...args]), { cwd })
 
-    process.stdout.on('data', (data) => {
+    child.stdout.on('data', (data) => {
       const output = data.toString()
       global.mainWindow?.webContents.send('ipc-pnpm-log', output)
     })
 
-    process.stderr.on('data', (data) => {
+    child.stderr.on('data', (data) => {
       const output = data.toString()
       global.mainWindow?.webContents.send('ipc-pnpm-log', output)
     })
 
-    process.on('close', (code) => {
+    child.on('close', (code) => {
       if (code === 0) {
         resolve(null)
       } else {
@@ -35,7 +35,7 @@ async function execCommand(command: string, cwd: string) {
       }
     })
 
-    process.on('error', (error) => {
+    child.on('error', (error) => {
       reject(error)
     })
   })

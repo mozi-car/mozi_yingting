@@ -20,6 +20,19 @@ declare global {
 // ---------- 事件分发（sidecar emit → renderer on） ----------
 const listeners = new Map<string, Set<Function>>()
 let tauriListenStarted = false
+let hardwareListenStarted = false
+const pendingHardwareEvents: Array<{ channel: string; payload: any }> = []
+
+function startHardwareListen() {
+  if (hardwareListenStarted) return
+  hardwareListenStarted = true
+  listen('hardware-added', (event) => {
+    dispatchHardwareEvent('hardware-added', event.payload)
+  }).catch((e) => console.error('[shim] hardware-added listen failed:', e))
+  listen('hardware-removed', (event) => {
+    dispatchHardwareEvent('hardware-removed', event.payload)
+  }).catch((e) => console.error('[shim] hardware-removed listen failed:', e))
+}
 
 function startTauriListen() {
   if (tauriListenStarted) return
@@ -38,7 +51,11 @@ function startTauriListen() {
     }
     for (const cb of [...cbs]) {
       try {
-        cb(syntheticEvent)
+        // Electron ipcRenderer listeners receive (event, ...payload), while
+        // Tauri delivers the payload on its event object. Preserve the old
+        // positional API because much of the renderer still uses (_event, x).
+        const args = Array.isArray(payload) ? payload : [payload]
+        cb(syntheticEvent, ...args)
       } catch (e) {
         console.error('[shim:event]', channel, e)
       }
@@ -46,10 +63,35 @@ function startTauriListen() {
   }).catch((e) => console.error('[shim] listen failed:', e))
 }
 
+function dispatchHardwareEvent(channel: string, payload: any) {
+  const cbs = listeners.get(channel)
+  if (!cbs || cbs.size === 0) {
+    pendingHardwareEvents.push({ channel, payload })
+    return
+  }
+  for (const cb of [...cbs]) {
+    const event = { channel, payload, data: payload }
+    const args = Array.isArray(payload) ? payload : [payload]
+    cb(event, ...args)
+  }
+}
+
 function registerListener(channel: string, cb: Function): () => void {
   startTauriListen()
+  if (channel === 'hardware-added' || channel === 'hardware-removed') startHardwareListen()
   if (!listeners.has(channel)) listeners.set(channel, new Set())
   listeners.get(channel)!.add(cb)
+  if (channel === 'hardware-added' || channel === 'hardware-removed') {
+    for (let i = pendingHardwareEvents.length - 1; i >= 0; i--) {
+      const event = pendingHardwareEvents[i]
+      if (event.channel === channel) {
+        pendingHardwareEvents.splice(i, 1)
+        const syntheticEvent = { channel, payload: event.payload, data: event.payload }
+        const args = Array.isArray(event.payload) ? event.payload : [event.payload]
+        cb(syntheticEvent, ...args)
+      }
+    }
+  }
   return () => listeners.get(channel)?.delete(cb)
 }
 
@@ -93,8 +135,11 @@ function storeSet(key: string, val: any) {
 
 // ---------- ipcRenderer ----------
 const ipcRenderer = {
-  invoke: (channel: string, ...args: any[]) =>
-    invoke('rpc_invoke', { channel, args }).then((r) => (r ?? undefined) as any),
+  invoke: (channel: string, ...args: any[]) => {
+    return invoke(channel === 'take_pending_open' || channel === 'app_info' ? channel : 'rpc_invoke',
+      channel === 'take_pending_open' || channel === 'app_info' ? {} : { channel, args })
+      .then((r) => (r ?? undefined) as any)
+  },
   send: (channel: string, ...args: any[]) => {
     invoke('rpc_invoke', { channel, args }).catch((e) =>
       console.error('[shim:send]', channel, e)
