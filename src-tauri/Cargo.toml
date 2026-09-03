@@ -1,6 +1,6 @@
 [package]
 name = "yingting"
-version = "0.1.0"
+version = "0.2.0"
 description = "婴听 - 汽车ECU开发工具"
 authors = ["mozi"]
 edition = "2021"
