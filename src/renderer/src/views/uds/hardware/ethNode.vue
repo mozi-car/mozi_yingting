@@ -12,9 +12,6 @@
     <el-divider content-position="left">
       {{ i18next.t('uds.hardware.canNode.sections.device') }}
     </el-divider>
-    <el-form-item :label="i18next.t('uds.hardware.canNode.labels.name')" prop="name" required>
-      <el-input v-model="data.name" />
-    </el-form-item>
     <el-form-item :label="i18next.t('uds.hardware.canNode.labels.vendor')">
       <el-tag>
         {{ props.vendor.toLocaleUpperCase() }}
@@ -31,7 +28,20 @@
           :key="item.handle"
           :label="item.label"
           :value="item.handle"
-        />
+          :disabled="item.busy"
+        >
+          <span
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              width: 100%;
+              gap: 15px;
+            "
+          >
+            <span>{{ item.label }}</span>
+          </span>
+        </el-option>
         <template #footer>
           <el-button
             text
@@ -44,6 +54,14 @@
           </el-button>
         </template>
       </el-select>
+    </el-form-item>
+
+    <el-divider content-position="left">网络基本配置</el-divider>
+    <el-form-item label="IP 地址" prop="ipAddress" required>
+      <el-input v-model="data.ipAddress" placeholder="例如 192.168.1.100" />
+    </el-form-item>
+    <el-form-item label="子网掩码" prop="subnetMask" required>
+      <el-input v-model="data.subnetMask" placeholder="例如 255.255.255.0" />
     </el-form-item>
 
     <el-divider />
@@ -95,7 +113,9 @@ const data = ref<EthBaseInfo>({
   },
   name: '',
   id: '',
-  vendor: 'simulate'
+  vendor: 'simulate',
+  ipAddress: '',
+  subnetMask: ''
 })
 
 const deviceList = ref<EthDevice[]>([])
@@ -107,6 +127,8 @@ function getDevice(visible: boolean) {
       .invoke('ipc-get-eth-devices', props.vendor.toLocaleUpperCase())
       .then((res) => {
         deviceList.value = res
+        // Populate the network details for existing mappings as well as new ones.
+        syncSelectedDevice()
       })
       .finally(() => {
         deviceLoading.value = false
@@ -128,8 +150,19 @@ const nameCheck = (rule: any, value: any, callback: any) => {
   }
 }
 
+const ipv4Rule = (rule: any, value: any, callback: any) => {
+  const text = String(value || '').trim()
+  const parts = text.split('.')
+  if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part) || Number(part) > 255)) {
+    callback(new Error('请输入有效的 IPv4 地址'))
+  } else {
+    callback()
+  }
+}
+
 const rules: FormRules<EthBaseInfo> = {
-  name: [{ required: true, trigger: 'blur', validator: nameCheck }],
+  ipAddress: [{ required: true, validator: ipv4Rule, trigger: 'blur' }],
+  subnetMask: [{ required: true, validator: ipv4Rule, trigger: 'blur' }],
   'device.handle': [
     {
       required: true,
@@ -147,13 +180,19 @@ const props = defineProps<{
 const editIndex = ref(props.index)
 
 const emits = defineEmits(['change'])
+
+// The select binds only the handle. Copy the selected enumeration record into
+// the persisted device as well, otherwise the channel graph has no label to display.
+function syncSelectedDevice() {
+  const selected = deviceList.value.find((item) => item.handle == data.value.device.handle)
+  if (selected) data.value.device = cloneDeep(selected)
+}
+
 const onSubmit = () => {
   ruleFormRef.value?.validate((valid) => {
     if (valid) {
       data.value.vendor = props.vendor
-      data.value.device.detail = deviceList.value.find(
-        (item) => item.handle == data.value.device.handle
-      )?.detail
+      syncSelectedDevice()
       if (editIndex.value == '') {
         const id = v4()
         data.value.id = id
@@ -179,9 +218,7 @@ function save() {
     ruleFormRef.value?.validate((valid) => {
       if (valid) {
         data.value.vendor = props.vendor
-        data.value.device.detail = deviceList.value.find(
-          (item) => item.handle == data.value.device.handle
-        )?.detail
+        syncSelectedDevice()
         if (editIndex.value == '') {
           const id = v4()
           data.value.id = id
@@ -219,6 +256,8 @@ onBeforeMount(() => {
       data.value.name = `${props.vendor.toLocaleUpperCase()}_${Object.keys(devices.devices).length}`
       editIndex.value = ''
     }
+  } else {
+    data.value.name = `${props.vendor.toLocaleUpperCase()}_${Object.keys(devices.devices).length}`
   }
 
   watcher = watch(

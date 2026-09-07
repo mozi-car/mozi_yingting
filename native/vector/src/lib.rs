@@ -282,11 +282,13 @@ pub fn can_transmit_ex(
 #[napi(js_name = "xlCanReceive")]
 pub fn can_receive(port: i64) -> Result<i32> {
     let mut event = RawRx::default();
+    event.size = std::mem::size_of::<RawRx>() as u32;
     Ok(unsafe { load::<CanReceive>(b"xlCanReceive\0")?(port as i32, &mut event).into() })
 }
 #[napi(js_name = "receiveCanEvent")]
 pub fn receive_can_event(port: i64) -> Result<XlCanRxEvent> {
     let mut event = RawRx::default();
+    event.size = std::mem::size_of::<RawRx>() as u32;
     let status = unsafe { load::<CanReceive>(b"xlCanReceive\0")?(port as i32, &mut event) };
     if status != 0 {
         return Err(Error::from_reason(format!(
@@ -298,7 +300,7 @@ pub fn receive_can_event(port: i64) -> Result<XlCanRxEvent> {
     Ok(XlCanRxEvent {
         tag: event.tag,
         can_id: event.msg.can_id,
-        msg_flags: event.msg.flags,
+        msg_flags: event.msg.msg_flags,
         dlc: event.msg.dlc,
         data: event.msg.data[..n].to_vec(),
         time_stamp_sync: event.timestamp as i64,
@@ -506,6 +508,34 @@ struct RawEvent {
     msg: RawClassicMsg,
 }
 #[repr(C)]
+#[derive(Clone, Copy)]
+struct RawCanRxMsg {
+    can_id: u32,
+    msg_flags: u32,
+    crc: u32,
+    reserved1: [u8; 12],
+    total_bit_count: u16,
+    dlc: u8,
+    reserved: [u8; 5],
+    data: [u8; 64],
+}
+
+impl Default for RawCanRxMsg {
+    fn default() -> Self {
+        Self {
+            can_id: 0,
+            msg_flags: 0,
+            crc: 0,
+            reserved1: [0; 12],
+            total_bit_count: 0,
+            dlc: 0,
+            reserved: [0; 5],
+            data: [0; 64],
+        }
+    }
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Default)]
 struct RawRx {
     size: u32,
@@ -516,7 +546,7 @@ struct RawRx {
     reserved: u16,
     reserved1: u64,
     timestamp: u64,
-    msg: RawCanMsg,
+    msg: RawCanRxMsg,
 }
 #[repr(C, packed(1))]
 #[derive(Clone, Copy)]

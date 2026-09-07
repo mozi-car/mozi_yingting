@@ -1,0 +1,35 @@
+{
+  "generatedAt": "2026-09-04",
+  "vendorDll": "resources/lib/vxlapi64.dll",
+  "device": "Vector VN5620",
+  "serialNumber": 13455,
+  "physicalChannel": {
+    "name": "VN5620 Channel 5",
+    "channelMask": 16,
+    "xlOpenPort": 0,
+    "xlCanSetChannelParams": 0,
+    "xlActivateChannel": 0,
+    "xlDeactivateChannel": 0,
+    "xlClosePort": 0
+  },
+  "virtualLoopback": {
+    "channel": "Virtual Channel 1",
+    "xlOpenPort": 0,
+    "xlActivateChannel": 0,
+    "xlCanTransmit": 0,
+    "received": {
+      "tag": 1,
+      "canId": 1445,
+      "dlc": 8,
+      "data": [222, 173, 190, 239, 1, 2, 3, 4]
+    },
+    "xlDeactivateChannel": 0,
+    "xlClosePort": 0
+  },
+  "driver": {
+    "xlOpenDriver": 0,
+    "xlGetDriverConfig": 0,
+    "xlCloseDriver": 0
+  },
+  "conclusion": "Rust addon loads the vendor Vector DLL, connects to the physical VN5620 channel, completes physical open/configure/activate/close, and completes deterministic vendor virtual CAN transmit/receive loopback. Physical bus-peer transmit/receive still requires a connected CAN peer."
+}

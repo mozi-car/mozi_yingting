@@ -75,6 +75,13 @@ fn sidecar_command(app: &AppHandle) -> Command {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::inherit());
     cmd.stdin(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // The bundled Node runtime is a console executable. Prevent Windows
+        // from opening a visible console window for the background sidecar.
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
     let sidecar_root = cjs.parent().unwrap_or_else(|| std::path::Path::new("."));
     cmd.env("YT_NATIVE_DIR", sidecar_root.join("native"));
     let resource_root = if sidecar_root.ends_with("sidecar") {

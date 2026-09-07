@@ -12,6 +12,9 @@ export interface EthBaseInfo {
   device: EthDevice
   vendor: string
   id: string
+  /** Optional local network settings configured for this ETH channel. */
+  ipAddress?: string
+  subnetMask?: string
 }
 
 /**

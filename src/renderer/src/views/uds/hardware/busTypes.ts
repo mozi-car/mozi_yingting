@@ -50,6 +50,36 @@ export interface ChannelSummary {
   param2?: string
 }
 
+/** Returns physical identity; the user-editable device name is intentionally excluded. */
+export function getPhysicalDeviceLabel(device?: UdsDevice): string | undefined {
+  if (!device) return undefined
+  if (device.type === 'can' && device.canDevice) {
+    return device.canDevice.hardwareName || String(device.canDevice.handle || '') || undefined
+  }
+  if (device.type === 'lin' && device.linDevice) {
+    return device.linDevice.device?.label || String(device.linDevice.device?.handle || '') || undefined
+  }
+  if (device.type === 'eth' && device.ethDevice) {
+    // Older projects may only have persisted handle/detail, not device.label.
+    // Always fall back to the actual interface address/name so the graph never
+    // renders a vendor-only summary.
+    return (
+      device.ethDevice.device?.label ||
+      device.ethDevice.device?.detail?.name ||
+      device.ethDevice.device?.detail?.address ||
+      device.ethDevice.device?.handle ||
+      undefined
+    )
+  }
+  if (device.type === 'pwm' && device.pwmDevice) {
+    return device.pwmDevice.device?.label || String(device.pwmDevice.device?.handle || '') || undefined
+  }
+  if (device.type === 'serial' && device.serialDevice) {
+    return device.serialDevice.device?.label || device.serialDevice.device?.handle || undefined
+  }
+  return undefined
+}
+
 function formatFreq(hz: number): string {
   if (hz >= 1000000 && hz % 1000000 === 0) return `${hz / 1000000}Mbps`
   if (hz >= 1000) return `${hz / 1000}kbps`
@@ -71,22 +101,22 @@ export function getDeviceSummary(device?: UdsDevice): ChannelSummary {
             : undefined
     return {
       vendor: d.vendor,
-      model: d.name,
+      model: getPhysicalDeviceLabel(device),
       param1: formatFreq(d.bitrate.freq),
       param2: res === undefined ? undefined : res ? '120Ω 已启用' : '120Ω 未启用'
     }
   } else if (device.type === 'lin' && device.linDevice) {
     const d = device.linDevice
-    return { vendor: d.vendor, model: d.name, param1: `${d.baudRate}bps` }
+    return { vendor: d.vendor, model: getPhysicalDeviceLabel(device), param1: `${d.baudRate}bps` }
   } else if (device.type === 'eth' && device.ethDevice) {
     const d = device.ethDevice
-    return { vendor: d.vendor, model: d.name }
+    return { vendor: d.vendor, model: getPhysicalDeviceLabel(device) }
   } else if (device.type === 'pwm' && device.pwmDevice) {
     const d = device.pwmDevice
-    return { vendor: d.vendor, model: d.name, param1: `${d.freq}Hz` }
+    return { vendor: d.vendor, model: getPhysicalDeviceLabel(device), param1: `${d.freq}Hz` }
   } else if (device.type === 'serial' && device.serialDevice) {
     const d = device.serialDevice
-    return { vendor: d.vendor, model: d.name, param1: `${d.baudRate}bps` }
+    return { vendor: d.vendor, model: getPhysicalDeviceLabel(device), param1: `${d.baudRate}bps` }
   }
   return {}
 }

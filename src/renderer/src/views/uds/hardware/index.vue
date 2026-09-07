@@ -159,8 +159,8 @@ const expandedKeys = ref<string[]>([])
 let hardwareRefreshTimer: ReturnType<typeof setInterval> | undefined
 let hardwareLoadSerial = 0
 
-function rememberExpanded(node: { data?: VendorTreeNode }) {
-  const id = node.data?.id
+function rememberExpanded(data: VendorTreeNode) {
+  const id = data?.id
   if (!id) return
   const keys = expandedByType.get(activeType.value) ?? new Set<string>()
   keys.add(id)
@@ -168,8 +168,8 @@ function rememberExpanded(node: { data?: VendorTreeNode }) {
   expandedKeys.value = [...keys]
 }
 
-function rememberCollapsed(node: { data?: VendorTreeNode }) {
-  const id = node.data?.id
+function rememberCollapsed(data: VendorTreeNode) {
+  const id = data?.id
   if (!id) return
   const keys = expandedByType.get(activeType.value) ?? new Set<string>()
   keys.delete(id)
@@ -392,24 +392,11 @@ function buildChannelVMs(type: BusType): ChannelVM[] {
     }
     const summary = getDeviceSummary(device)
     const hasIa = children.some((child) => child.kind === 'ia')
-    const canDevice = device?.canDevice
-    const canVendorNode = canDevice
-      ? vendorTree.value.find((node) => node.id === `${type}:${canDevice.vendor}`)
-      : undefined
-    const detectedCanName = canVendorNode?.children?.find((child) =>
-      child.id.endsWith(`:${String(canDevice?.handle)}`)
-    )?.label
-    const hardwareName =
-      canDevice?.hardwareName ||
-      detectedCanName ||
-      device?.linDevice?.label ||
-      device?.ethDevice?.device?.label ||
-      device?.serialDevice?.device?.label
     return {
       id: c.id,
-      // Channel cards show the driver-reported hardware name once configured;
-      // the editable channel label remains only for an unconfigured channel.
-      name: hardwareName || c.name,
+      // Keep the logical channel title separate from the physical device summary
+      // below it. Otherwise CAN hardware names are rendered twice in one card.
+      name: c.name,
       configured: !!c.deviceId,
       summary: c.deviceId
         ? {

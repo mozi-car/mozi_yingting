@@ -1,6 +1,6 @@
 # 当前进度
 
-更新时间：2026-09-03
+更新时间：2026-09-04
 
 ## 已完成
 
@@ -25,6 +25,9 @@
 - [x] Vector LIN 实际 TypeScript 调用已接入 Rust XL LIN ABI（channel params、DLC、slave、request、wakeup、LIN event）
 - [x] ZLG receive array 和 Toomoss/Peak LIN 数据字段已从假 pointer 访问改为 Rust-owned buffer/显式 ABI 参数
 - [x] PEAK/Vector TSFN 不再预读并吞掉 vendor 队列消息；JavaScript handler 负责实际 Read
+- [x] Vector `XLcanRxEvent` Rust ABI 对齐厂商头文件：接收消息使用独立 RX header/union 布局，并初始化 event size，避免把 TX message 布局误传给 `xlCanReceive`
+- [x] Vector 实机 E2E：VN5620 物理 Channel 5 完成 Rust DLL open/config/activate/deactivate/close；Virtual Channel 1 完成 vendor loopback transmit/receive，收到 ID `0x5A5` 和完整 8 字节 payload；命令为 `npm run test:vector:e2e`
+- [x] Vector 替换完成后删除对应旧 C++/SWIG 源码、头文件和 `.lib` 导入库；保留厂商运行时 `resources/lib/vxlapi64.dll`
 
 ## 已实现但仍需厂商 DLL/硬件回归
 
@@ -33,7 +36,7 @@
 - [~] `peak.node`：PCAN-ISO-TP 原始 ABI 结构、消息分配/初始化/读写/释放、mapping、时间戳、callback 和 cyclic；真实 PCAN DLL/消息布局仍需验证
 - [~] `kvaser.node`：canlib DLL、CAN 收发、输出参数 wrapper、callback/cyclic；真实 canlib DLL/硬件仍需验证
 - [~] `zlg.node`：ZLG DLL、设备/通道、CAN/CAN-FD、Rust-owned receive arrays、callback；真实 ZLG DLL/硬件仍需验证
-- [~] `vector.node`：XL driver/config、CAN/CAN-FD、Rust-owned event 收发、callback；VN5620 枚举/open/activate/receive-empty/close 已实测，尚缺实际总线帧、错误帧、时间戳和 callback 收发证据
+- [x] `vector.node`：XL driver/config、CAN/CAN-FD、Rust-owned event 收发、callback；VN5620 物理通道生命周期和 Vector Virtual Channel vendor loopback 已实测，Vector 对应 C++/SWIG 代码已删除，厂商 `vxlapi64.dll` 保留并由 Rust 动态加载
 - [~] `toomoss.node`：设备、CAN/CAN-FD、struct packing、callback；真实 USB2CAN DLL/硬件仍需验证
 - [~] `kvaserLin.node`：linlib DLL、LIN 收发、callback；真实 LIN 硬件仍需验证
 - [~] `peakLin.node`：PLin API、client/output buffer、LIN 收发、callback；真实 PLin DLL/硬件仍需验证

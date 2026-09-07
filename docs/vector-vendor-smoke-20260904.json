@@ -1,0 +1,28 @@
+{
+  "generatedAt": "2026-09-04",
+  "platform": "win32",
+  "vendorDll": "resources/lib/vxlapi64.dll",
+  "device": {
+    "model": "VN5620",
+    "serialNumber": 13455,
+    "canChannels": ["VN5620 Channel 5", "VN5620 Channel 6"]
+  },
+  "verified": {
+    "LoadDll": true,
+    "xlOpenDriver": 0,
+    "xlGetDriverConfig": 0,
+    "xlOpenPort": 0,
+    "xlCanSetChannelParams": 0,
+    "xlActivateChannel": 0,
+    "xlDeactivateChannel": 0,
+    "xlClosePort": 0,
+    "xlCloseDriver": 0
+  },
+  "notVerified": {
+    "xlCanTransmitEx": "vendor returned 118; no successful bus transmit claimed",
+    "xlCanReceive": "vendor returned 112; no frame was available",
+    "callback": "no received frame available to prove callback delivery",
+    "reason": "no confirmed CAN bus peer or loopback frame in current setup"
+  },
+  "implementationChange": "Rust XLcanRxEvent ABI now matches XLcanRxEvent/XL_CAN_EV_RX_MSG and initializes event size before xlCanReceive"
+}

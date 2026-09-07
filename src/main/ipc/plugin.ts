@@ -20,9 +20,9 @@ import { TesterInfo } from 'nodeCan/tester'
 import { store } from '../store'
 const libPath = path.dirname(runtimeDom)
 
-ipcMain.on('ipc-plugin-lib-path', async (event, ...arg) => {
-  event.returnValue = libPath.replaceAll('\\', '/')
-})
+// The renderer needs the real bundled library directory to build plugin import maps.
+// Use an async RPC handler: Tauri/WebView has no synchronous IPC equivalent.
+ipcMain.handle('ipc-plugin-lib-path', async () => libPath.replaceAll('\\', '/'))
 
 // 获取插件目录
 ipcMain.handle('ipc-get-plugins-dir', async () => {

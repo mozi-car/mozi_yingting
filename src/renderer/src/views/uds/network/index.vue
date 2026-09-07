@@ -112,6 +112,7 @@ import computerOutlineRounded from '@iconify/icons-material-symbols/computer-out
 import textFields from '@iconify/icons-material-symbols/text-fields'
 import assistantDeviceRounded from '@iconify/icons-material-symbols/assistant-device-rounded'
 import editIcon from '@iconify/icons-material-symbols/edit'
+import { getDeviceSummary, getPhysicalDeviceLabel } from '../hardware/busTypes'
 import locationDisabled from '@iconify/icons-material-symbols/location-disabled'
 import fileIcon from '@iconify/icons-material-symbols/file-open-rounded'
 import copyIcon from '@iconify/icons-material-symbols/content-copy'
@@ -173,7 +174,7 @@ function addChild(parent: Tree) {
       if (item.type == 'can' && item.canDevice) {
         const cc: Tree = {
           type: 'device',
-          label: item.canDevice.name,
+          label: formatDeviceLabel(item),
           canAdd: false,
           children: [],
           icon: deviceIcon,
@@ -189,7 +190,7 @@ function addChild(parent: Tree) {
       if (item.type == 'eth' && item.ethDevice) {
         const cc: Tree = {
           type: 'device',
-          label: item.ethDevice.name,
+          label: formatDeviceLabel(item),
           canAdd: false,
           children: [],
           icon: deviceIcon,
@@ -205,7 +206,7 @@ function addChild(parent: Tree) {
       if (item.type == 'lin' && item.linDevice) {
         const cc: Tree = {
           type: 'device',
-          label: item.linDevice.name,
+          label: formatDeviceLabel(item),
           canAdd: false,
           children: [],
           icon: deviceIcon,
@@ -221,7 +222,7 @@ function addChild(parent: Tree) {
       if (item.type == 'pwm' && item.pwmDevice) {
         const cc: Tree = {
           type: 'device',
-          label: item.pwmDevice.name,
+          label: formatDeviceLabel(item),
           canAdd: false,
           children: [],
           icon: deviceIcon,
@@ -237,7 +238,7 @@ function addChild(parent: Tree) {
       if (item.type == 'serial' && item.serialDevice) {
         const cc: Tree = {
           type: 'device',
-          label: item.serialDevice.name,
+          label: formatDeviceLabel(item),
           canAdd: false,
           children: [],
           icon: deviceIcon,
@@ -553,15 +554,15 @@ function copySelectedNode() {
   }
 }
 
-// Helper function to get device name
+// Hardware screens display the physical identity; the persisted name is only
+// retained for compatibility with existing IA/Node references.
+function formatDeviceLabel(device: UdsDevice): string {
+  const summary = getDeviceSummary(device)
+  return [summary.vendor?.toUpperCase(), getPhysicalDeviceLabel(device)].filter(Boolean).join(' · ') || 'Device'
+}
+
 function getDeviceName(device: UdsDevice): string {
-  if (device.canDevice) return device.canDevice.name
-  if (device.ethDevice) return device.ethDevice.name
-  if (device.linDevice) return device.linDevice.name
-  if (device.pwmDevice) return device.pwmDevice.name
-  if (device.serialDevice) return device.serialDevice.name
-  if (device.someipDevice) return device.someipDevice.name
-  return 'Device'
+  return formatDeviceLabel(device)
 }
 
 // Generate unique name with incremental suffix

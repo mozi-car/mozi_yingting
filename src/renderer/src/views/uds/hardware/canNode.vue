@@ -12,9 +12,6 @@
     <el-divider content-position="left">
       {{ i18next.t('uds.hardware.canNode.sections.device') }}
     </el-divider>
-    <el-form-item :label="i18next.t('uds.hardware.canNode.labels.name')" prop="name" required>
-      <el-input v-model="data.name" />
-    </el-form-item>
     <el-form-item :label="i18next.t('uds.hardware.canNode.labels.vendor')">
       <el-tag>
         {{ props.vendor.toLocaleUpperCase() }}
@@ -1339,7 +1336,6 @@ const bitrateCheck = (rule: any, value: any, callback: any) => {
 }
 
 const rules: FormRules<CanBaseInfo> = {
-  name: [{ required: true, trigger: 'blur', validator: nameCheck }],
   handle: [
     {
       required: true,

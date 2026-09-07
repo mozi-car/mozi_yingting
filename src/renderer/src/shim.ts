@@ -98,7 +98,6 @@ function registerListener(channel: string, cb: Function): () => void {
 // ---------- sendSync 兼容（仅少量初始化调用） ----------
 const SYNC_STUBS: Record<string, (...args: any[]) => any> = {
   'ipc-get-casdoor-config': () => null,
-  'ipc-plugin-lib-path': () => '',
   'ipc-service-detail': () => null
 }
 

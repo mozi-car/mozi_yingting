@@ -12,9 +12,6 @@
     <el-divider content-position="left">
       {{ i18next.t('uds.hardware.serialNode.sections.device') }}
     </el-divider>
-    <el-form-item :label="i18next.t('uds.hardware.serialNode.labels.name')" prop="name" required>
-      <el-input v-model="data.name" />
-    </el-form-item>
     <el-form-item :label="i18next.t('uds.hardware.serialNode.labels.vendor')">
       <el-tag>
         {{ props.vendor.toLocaleUpperCase() }}
@@ -36,6 +33,7 @@
           :key="item.handle"
           :label="item.label"
           :value="item.handle"
+          :disabled="item.busy"
         >
           <span
             style="
@@ -219,7 +217,6 @@ const baudRateCheck = (rule: any, value: any, callback: any) => {
 
 const rules = computed(() => {
   return {
-    name: [{ required: true, trigger: 'blur', validator: nameCheck }],
     'device.handle': [
       {
         required: true,
@@ -295,6 +292,8 @@ onBeforeMount(() => {
       data.value.name = `${props.vendor.toLocaleUpperCase()}_Serial_${Object.keys(devices.devices).length}`
       editIndex.value = ''
     }
+  } else {
+    data.value.name = `${props.vendor.toLocaleUpperCase()}_Serial_${Object.keys(devices.devices).length}`
   }
 
   watcher = watch(

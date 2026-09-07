@@ -65,11 +65,11 @@ const plugin = plguinStore.getPlugin(props.pluginId)!
 const editIndex = toRef(props, 'editIndex')
 const width = toRef(props, 'width')
 const height = toRef(props, 'height')
-const libPath = window.electron.ipcRenderer.sendSync('ipc-plugin-lib-path')
+const libPath = await window.electron.ipcRenderer.invoke('ipc-plugin-lib-path')
 const isDark = useDark()
 const darkValue = unref(isDark)
 const globalStartValue = unref(globalStartRef)
-const basePath = plugin.path.replace(/'/g, '%27')
+const basePath = encodeURIComponent(plugin.path).replace(/'/g, '%27')
 const layout = inject('layout') as Layout
 
 const importMap = {

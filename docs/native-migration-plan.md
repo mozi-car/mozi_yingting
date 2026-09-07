@@ -11,7 +11,7 @@ The 11 addon targets now have independent Rust N-API crates and are rebuilt into
 | `peak.node` | `native/peak` | PCAN raw ABI/message/mapping/read-write/callback paths implemented; PCAN DLL regression pending |
 | `kvaser.node` | `native/kvaser` | CANlib classic/FD, output wrappers, callback and cyclic paths implemented; hardware regression pending |
 | `zlg.node` | `native/zlg` | ZLG device/channel/classic/FD, Rust-owned receive arrays and callback paths implemented; hardware regression pending |
-| `vector.node` | `native/vector` | XL driver/config/classic/FD event paths implemented; hardware regression pending |
+| `vector.node` | `native/vector` | XL driver/config/classic/FD event paths implemented and verified against VN5620; Vector C++/SWIG source and import library removed, runtime `resources/lib/vxlapi64.dll` intentionally preserved |
 | `toomoss.node` | `native/toomoss` | ControlCAN device/channel/classic/FD paths and vendor struct packing implemented; hardware regression pending |
 | `kvaserLin.node` | `native/kvaserLin` | LINlib channel/read/write/request/update/wakeup and callback paths implemented; hardware regression pending |
 | `peakLin.node` | `native/peakLin` | PLIN client, hardware buffer, frames, read/write and callback paths implemented; hardware regression pending |
@@ -49,4 +49,4 @@ For each addon, the target machine must provide the vendor DLL and hardware and 
 
 The GUI enumeration path was verified through the same IPC request used by `canNode` and recorded in [`vector-gui-path-20260903.json`](./vector-gui-path-20260903.json). A vendor smoke run was recorded in [`native-vendor-smoke-20260903.json`](./native-vendor-smoke-20260903.json). It includes a real Vector VN5620: nine physical channels were enumerated and CAN Channel 5 was opened, activated, polled, deactivated, and closed. No CAN peer/frame was present, so the log does not qualify as complete bus behavior acceptance.
 
-Only after the complete evidence is available may the corresponding `[~]` become `[x]`, followed by removal of that module's C++/SWIG reference tree. No hardware result is claimed by the repository-only tests.
+For Vector, the complete vendor-DLL/device evidence is recorded in `docs/vector-e2e-20260904.json`; its C++/SWIG reference tree has therefore been removed. Other modules retain their references until their own replacement and hardware evidence are complete. No hardware result is claimed by repository-only tests.
