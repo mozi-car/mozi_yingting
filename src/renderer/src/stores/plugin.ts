@@ -9,6 +9,24 @@ import type {
 import { cloneDeep } from 'lodash'
 import i18next from 'i18next'
 
+const PLUGIN_RPC_TIMEOUT_MS = 10_000
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      }
+    )
+  })
+}
+
 export type PluginState = {
   plugins: Map<string, EcuBusPlugin>
   pluginsDisabled: Record<string, boolean>
@@ -91,12 +109,16 @@ export const usePluginStore = defineStore('usePluginStore', {
       const plugin = this.plugins.get(pluginId)
       if (plugin) {
         if (plugin.manifest.mainEntry) {
-          await window.electron.ipcRenderer.invoke(
-            'ipc-plugin-create',
-            pluginId,
-            plugin.manifest.name,
-            plugin.path,
-            plugin.manifest.mainEntry
+          await withTimeout(
+            window.electron.ipcRenderer.invoke(
+              'ipc-plugin-create',
+              pluginId,
+              plugin.manifest.name,
+              plugin.path,
+              plugin.manifest.mainEntry
+            ),
+            PLUGIN_RPC_TIMEOUT_MS,
+            `Loading plugin ${pluginId} timed out after ${PLUGIN_RPC_TIMEOUT_MS}ms`
           )
         }
 
@@ -194,22 +216,26 @@ export const usePluginStore = defineStore('usePluginStore', {
         // 加载所有插件
         await this.loadPluginsFromDirectories(pluginDirs)
 
-        // 自动启用未被禁用的插件
+        // 自动启用未被禁用的插件。单个插件失败不能阻塞其余插件和主界面。
         const enablePromises: Promise<void>[] = []
         for (const plugin of this.plugins.values()) {
           const pluginId = plugin.manifest.id
           const isDisabled = this.pluginsDisabled[pluginId] === true
           if (!isDisabled) {
-            enablePromises.push(this.enablePlugin(pluginId, false))
+            enablePromises.push(
+              this.enablePlugin(pluginId, false).catch((error) => {
+                console.error(`Failed to enable plugin ${pluginId}:`, error)
+              })
+            )
           }
         }
-        await Promise.all(enablePromises)
-
-        this.loaded = true
-        this.loading = false
+        await Promise.allSettled(enablePromises)
       } catch (error) {
         this.error = String(error)
+        console.error('[plugin] failed to load plugins:', error)
+      } finally {
         this.loaded = true
+        this.loading = false
       }
     },
 

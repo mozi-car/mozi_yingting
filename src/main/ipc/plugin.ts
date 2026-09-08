@@ -78,6 +78,23 @@ ipcMain.handle('ipc-list-plugin-dirs', async (event, pluginsDir: string) => {
 })
 
 const plugins: Record<string, PluginClient> = {}
+const PLUGIN_START_TIMEOUT_MS = 10_000
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      }
+    )
+  })
+}
 
 export async function startPlugins(
   channleList: string[],
@@ -106,8 +123,13 @@ export async function startPlugins(
       testers
     )
     try {
-      await entry.nodeItem.start()
+      await withTimeout(
+        Promise.resolve(entry.nodeItem.start()),
+        PLUGIN_START_TIMEOUT_MS,
+        `Plugin ${entry.name} start timed out after ${PLUGIN_START_TIMEOUT_MS}ms`
+      )
     } catch (error) {
+      // A plugin must not block the global hardware start sequence forever.
       global.sysLog.error(`Failed to start plugin: ${entry.name}`, error)
     }
   }

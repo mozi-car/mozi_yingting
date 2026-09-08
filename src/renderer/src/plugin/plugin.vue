@@ -2,6 +2,7 @@
   <div>
     <!--D:\code\app-template\dist\index.html  -->
     <WujieVue
+      v-if="ready"
       :name="editIndex"
       :url="entry"
       :fetch="isDev ? undefined : customFetch"
@@ -18,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, onMounted, onUnmounted, toRef, unref } from 'vue'
+import { inject, onMounted, onUnmounted, ref, toRef, unref } from 'vue'
 import { PluginItemConfig } from 'src/preload/plugin'
 import { useDataStore } from '@r/stores/data'
 import { usePluginStore } from '@r/stores/plugin'
@@ -45,9 +46,13 @@ const plguinStore = usePluginStore()
 const getConstItem = () => {
   const pluginInfo = plguinStore.getPlugin(props.pluginId)
   if (pluginInfo) {
-    const configs = pluginInfo.manifest.tabs || pluginInfo.manifest.extensions || []
+    const configs = [
+      ...(pluginInfo.manifest.tabs || []),
+      ...(pluginInfo.manifest.extensions || [])
+    ]
     for (const config of configs) {
-      return config.items.find((item) => item.id === props.item.id) || null
+      const item = config.items?.find((item) => item.id === props.item.id)
+      if (item) return item
     }
   }
 
@@ -61,27 +66,22 @@ const entry = isDev ? qitem?.entry : `file:///${qitem?.entry}`
 
 const entryBase = qitem?.entry?.split('/').slice(0, -1).join('/')
 
-const plugin = plguinStore.getPlugin(props.pluginId)!
+const plugin = plguinStore.getPlugin(props.pluginId)
+const ready = ref(false)
 const editIndex = toRef(props, 'editIndex')
 const width = toRef(props, 'width')
 const height = toRef(props, 'height')
-const libPath = await window.electron.ipcRenderer.invoke('ipc-plugin-lib-path')
+let libPath = ''
 const isDark = useDark()
 const darkValue = unref(isDark)
 const globalStartValue = unref(globalStartRef)
-const basePath = encodeURIComponent(plugin.path).replace(/'/g, '%27')
+const basePath = plugin ? encodeURIComponent(plugin.path).replace(/'/g, '%27') : ''
 const layout = inject('layout') as Layout
 
 const importMap = {
-  imports: {
-    vue: `local-resource:///${libPath}/runtime-dom.esm-browser.min.js`,
-    '@vue/shared': `local-resource:///${libPath}/shared.esm-bundler.min.js`,
-    'element-plus': `local-resource:///${libPath}/elementplus.index.full.min.mjs`,
-    '@element-plus/icons-vue': `local-resource:///${libPath}/elementplus.icon.min.js`,
-    '@ecubus-pro/renderer-plugin-sdk': `local-resource:///${libPath}/sdk.mjs`
-  }
+  imports: {} as Record<string, string>
 }
-const plugins = [
+const plugins = ref<any[]>([
   {
     jsBeforeLoaders: [
       {
@@ -129,7 +129,7 @@ const plugins = [
     ]
   },
   InstanceofPlugin()
-]
+])
 const customFetch = (url: string, options?: RequestInit) => {
   url = url.replace('file:///', 'local-resource:///' + basePath + '/')
   return window.fetch(url, options)
@@ -147,9 +147,9 @@ const loadError = (url: string, e: Error) => {
   })
 }
 
-onMounted(() => {
-  if (!qitem) {
-    ElMessageBox({
+onMounted(async () => {
+  if (!plugin || !qitem?.entry) {
+    await ElMessageBox({
       title: 'Item Not Found',
       message: `The item is not found in the plugin`,
       type: 'error',
@@ -158,9 +158,43 @@ onMounted(() => {
       showConfirmButton: true,
       confirmButtonText: 'Close',
       center: true
-    }).finally(() => {
-      layout.removeWin(props.editIndex, true)
-    })
+    }).catch(() => {})
+    layout.removeWin(props.editIndex, true)
+    return
+  }
+
+  try {
+    libPath = await Promise.race([
+      window.electron.ipcRenderer.invoke('ipc-plugin-lib-path'),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Plugin runtime initialization timed out')), 5000)
+      )
+    ])
+    importMap.imports = {
+      vue: `local-resource:///${libPath}/runtime-dom.esm-browser.min.js`,
+      '@vue/shared': `local-resource:///${libPath}/shared.esm-bundler.min.js`,
+      'element-plus': `local-resource:///${libPath}/elementplus.index.full.min.mjs`,
+      '@element-plus/icons-vue': `local-resource:///${libPath}/elementplus.icon.min.js`,
+      '@ecubus-pro/renderer-plugin-sdk': `local-resource:///${libPath}/sdk.mjs`
+    }
+    const importMapLoader = plugins.value[0]?.jsBeforeLoaders?.[1]
+    if (importMapLoader) {
+      importMapLoader.content = JSON.stringify(importMap, null, 2)
+    }
+    ready.value = true
+  } catch (e: any) {
+    error('[plugin] failed to initialize runtime', e)
+    await ElMessageBox({
+      title: 'Plugin Load Error',
+      message: e?.message || String(e),
+      type: 'error',
+      appendTo: `#win${props.editIndex}`,
+      showCancelButton: false,
+      showConfirmButton: true,
+      confirmButtonText: 'Close',
+      center: true
+    }).catch(() => {})
+    layout.removeWin(props.editIndex, true)
   }
 })
 // 安全销毁 wujie 应用，避免 stopIframeLoading 内部 loop/loop2 的竞态条件
@@ -169,7 +203,10 @@ const safeDestroyApp = async (name: string) => {
   const queue = (window as any).__WUJIE_QUEUE?.[name]
   if (queue instanceof Promise) {
     try {
-      await queue
+      await Promise.race([
+        queue,
+        new Promise((resolve) => setTimeout(resolve, 1000))
+      ])
     } catch {
       // 加载过程中的错误忽略
     }
