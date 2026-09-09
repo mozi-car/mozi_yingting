@@ -8,6 +8,7 @@ function getStubSaNode() {
   return {
     SeedKey: class {
       IsLoaded() { return false }
+      Unload() {}
       LoadDLL() { throw new Error('SecureAccessDll is only available on Windows platform') }
       GenerateKeyExOpt() { throw new Error('SecureAccessDll is only available on Windows platform') }
       GenerateKeyEx() { throw new Error('SecureAccessDll is only available on Windows platform') }
@@ -103,6 +104,10 @@ export class SecureAccessDll {
     const native = getSaNode()
     return this._ref.GenerateKeyEx(ipSeedArray, iSecurityLevel, ipVariant, key)
   }
+  Unload() {
+    this._ref.Unload()
+  }
+
   private loadDll(dllPath: string) {
     this._ref.LoadDLL(dllPath)
   }

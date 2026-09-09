@@ -7,6 +7,16 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const nativeDir = path.join(root, 'out', 'sidecar', 'native')
 const require = createRequire(import.meta.url)
 const results = []
+const defaultVendorDlls = {
+  YT_VENDOR_DLL_PEAK: path.join(root, 'resources', 'lib', 'PCAN-ISO-TP.dll'),
+  YT_VENDOR_DLL_KVASER: path.join(root, 'resources', 'lib', 'canlib32.dll'),
+  YT_VENDOR_DLL_ZLG: path.join(root, 'resources', 'lib', 'zlgcan.dll'),
+  YT_VENDOR_DLL_VECTOR: path.join(root, 'resources', 'lib', 'vxlapi64.dll'),
+  YT_VENDOR_DLL_TOOMOSS: path.join(root, 'resources', 'lib', 'USB2XXX.dll'),
+  YT_VENDOR_DLL_KVASERLIN: path.join(root, 'resources', 'lib', 'linlib.dll'),
+  YT_VENDOR_DLL_PEAKLIN: path.join(root, 'resources', 'lib', 'PLinApi.dll'),
+  YT_VENDOR_DLL_TOOMOSSLIN: path.join(root, 'resources', 'lib', 'USB2XXX.dll')
+}
 const record = (module, operation, value) => results.push({ module, operation, result: value === undefined ? { ok: true } : value })
 const call = (module, operation, fn) => {
   try {
@@ -19,8 +29,8 @@ const call = (module, operation, fn) => {
   }
 }
 function load(module, envName) {
-  const dll = process.env[envName]
-  if (!dll) return null
+  const dll = process.env[envName] || defaultVendorDlls[envName]
+  if (!dll || !fs.existsSync(dll)) return null
   const value = require(path.join(nativeDir, `${module}.node`))
   value.LoadDll(dll)
   record(module, 'LoadDll/IsLoaded', typeof value.IsLoaded === 'function' ? value.IsLoaded() : true)

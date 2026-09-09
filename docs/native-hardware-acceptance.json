@@ -1,0 +1,130 @@
+{
+  "generatedAt": "2026-09-09",
+  "acceptance_scope": "software",
+  "completion_rule": "software_verified=true is sufficient for Rust migration completion; hardware_verified is optional enhancement evidence and does not block software release.",
+  "software_gate": [
+    "npm run build:sidecar",
+    "npm run test:native",
+    "npm run test:vendor:dll"
+  ],
+  "hardware_evidence_schema": [
+    "enumeration",
+    "open_config",
+    "tx_rx",
+    "timestamp",
+    "error_codes",
+    "callback",
+    "close_reopen",
+    "thread_join"
+  ],
+  "modules": {
+    "sa": {
+      "source": "native/secure-access",
+      "software_verified": true,
+      "software_evidence": ["cargo test --manifest-path native/secure-access/Cargo.toml", "scripts/secure-access-regression.mjs", "scripts/vendor-dll-regression.mjs"],
+      "software_scope": "LoadLibrary/GetProcAddress, GenerateKeyEx/Opt, output capacity, error handling, Unload/reload",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Production SecureAccess acceptance vector is not required by the software acceptance scope"
+    },
+    "candle": {
+      "source": "native/candle",
+      "software_verified": true,
+      "software_evidence": ["scripts/native-interface-regression.mjs", "scripts/native-regression.mjs", "docs/native-vendor-smoke-20260909.json"],
+      "software_scope": "SetupAPI/WinUSB ABI, CAN/CAN-FD frame and timestamp handling, error paths, Rust backend Drop/close lifecycle",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Optional CandleLight WinUSB hardware was not connected"
+    },
+    "peak": {
+      "source": "native/peak",
+      "software_verified": true,
+      "software_evidence": ["scripts/native-interface-regression.mjs", "scripts/native-regression.mjs", "docs/native-vendor-smoke-20260909.json"],
+      "software_scope": "PCAN-ISO-TP ABI/message/mapping, Buffer ownership, read/write, callback and cyclic lifecycle",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Optional PCAN hardware and CAN peer were not connected"
+    },
+    "kvaser": {
+      "source": "native/kvaser",
+      "software_verified": true,
+      "software_evidence": ["scripts/native-interface-regression.mjs", "scripts/native-regression.mjs", "docs/native-vendor-smoke-20260909.json"],
+      "software_scope": "CANlib classic/CAN-FD ABI, output wrappers, callbacks, cyclic tasks and DLL error paths",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Optional Kvaser channel and CAN peer were not connected"
+    },
+    "zlg": {
+      "source": "native/zlg",
+      "software_verified": true,
+      "software_evidence": ["scripts/native-interface-regression.mjs", "scripts/native-regression.mjs", "docs/native-vendor-smoke-20260909.json"],
+      "software_scope": "ZLG device/channel/CAN-FD ABI, Rust-owned receive arrays, callbacks and error paths",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Optional ZLG device and CAN peer were not connected"
+    },
+    "vector": {
+      "source": "native/vector",
+      "software_verified": true,
+      "software_evidence": ["scripts/native-interface-regression.mjs", "scripts/native-regression.mjs", "docs/vector-e2e-20260904.json"],
+      "software_scope": "XL CAN/CAN-FD/LIN ABI, event ownership, callback and periodic lifecycle",
+      "hardware_verified": true,
+      "hardware_evidence": ["docs/vector-e2e-20260904.json", "docs/vector-vendor-smoke-20260904.json"],
+      "hardware_scope": "VN5620 CAN physical lifecycle and Vector Virtual Channel CAN loopback"
+    },
+    "toomoss": {
+      "source": "native/toomoss",
+      "software_verified": true,
+      "software_evidence": ["scripts/native-interface-regression.mjs", "scripts/native-regression.mjs", "docs/native-vendor-smoke-20260909.json"],
+      "software_scope": "USB2XXX CAN/CAN-FD struct packing, Rust Buffer boundaries, callbacks and error paths",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Optional USB2CAN device and CAN peer were not connected"
+    },
+    "kvaserLin": {
+      "source": "native/kvaserLin",
+      "software_verified": true,
+      "software_evidence": ["scripts/native-interface-regression.mjs", "scripts/native-regression.mjs", "docs/native-vendor-smoke-20260909.json"],
+      "software_scope": "LINlib frame ABI, read/write/request/wakeup, callbacks, timestamp and lifecycle paths",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Optional Kvaser LIN hardware was not connected"
+    },
+    "peakLin": {
+      "source": "native/peakLin",
+      "software_verified": true,
+      "software_evidence": ["scripts/native-interface-regression.mjs", "scripts/native-regression.mjs", "docs/native-vendor-smoke-20260909.json"],
+      "software_scope": "PLIN client/frame/output-buffer ABI, read/write/callback and error paths",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Optional PEAK LIN hardware was not connected"
+    },
+    "toomossLin": {
+      "source": "native/toomossLin",
+      "software_verified": true,
+      "software_evidence": ["scripts/native-interface-regression.mjs", "scripts/native-regression.mjs", "docs/native-vendor-smoke-20260909.json"],
+      "software_scope": "USB2LIN frame/struct ABI, read/write/callback and lifecycle paths",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Optional USB2LIN hardware was not connected"
+    },
+    "vsomeip": {
+      "source": "native/vsomeip",
+      "software_verified": true,
+      "software_evidence": ["scripts/vsomeip-regression.mjs", "scripts/native-interface-regression.mjs", "out/sidecar/vsomeip.js"],
+      "software_scope": "SOME/IP header/SD encoding, UDP/TCP transport, callbacks, periodic tasks and stop/join lifecycle",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Optional external SOME/IP service-discovery peer was not connected"
+    },
+    "serial": {
+      "source": "native/serial",
+      "software_verified": true,
+      "software_evidence": ["scripts/native-interface-regression.mjs", "native/serial/src/lib.rs"],
+      "software_scope": "Rust serial open/write/read/close/list API and callback boundary",
+      "hardware_verified": false,
+      "hardware_evidence": [],
+      "hardware_blocked_by": "Optional physical serial loopback was not connected"
+    }
+  }
+}

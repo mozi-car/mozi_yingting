@@ -47,11 +47,47 @@ fn device_from_object(device: &Object) -> Result<DeviceRef> {
 
 #[napi(object)]
 #[derive(Clone)]
+pub struct CandleCapabilityInfo {
+    pub feature: u32,
+    pub fclk_can: u32,
+    pub tseg1_min: u32,
+    pub tseg1_max: u32,
+    pub tseg2_min: u32,
+    pub tseg2_max: u32,
+    pub sjw_max: u32,
+    pub brp_min: u32,
+    pub brp_max: u32,
+    pub brp_inc: u32,
+}
+
+#[napi(object)]
+#[derive(Clone)]
+pub struct CandleDeviceConfigInfo {
+    pub icount: u8,
+    pub sw_version: u32,
+    pub hw_version: u32,
+}
+
+#[napi(object)]
+#[derive(Clone)]
 pub struct DeviceInfo {
     pub path: String,
     pub friendly_name: String,
     #[napi(js_name = "interfaceNumber")]
     pub interface_number: u8,
+    #[napi(js_name = "bt_const")]
+    pub bt_const: CandleCapabilityInfo,
+    #[napi(js_name = "data_bt_const")]
+    pub data_bt_const: CandleCapabilityInfo,
+    pub dconf: CandleDeviceConfigInfo,
+}
+
+fn capability_info(value: crate::frame::CandleCapability) -> CandleCapabilityInfo {
+    CandleCapabilityInfo {
+        feature: value.feature, fclk_can: value.fclk_can, tseg1_min: value.tseg1_min,
+        tseg1_max: value.tseg1_max, tseg2_min: value.tseg2_min, tseg2_max: value.tseg2_max,
+        sjw_max: value.sjw_max, brp_min: value.brp_min, brp_max: value.brp_max, brp_inc: value.brp_inc,
+    }
 }
 
 #[napi(js_name = "scanDevices")]
@@ -63,12 +99,30 @@ pub fn scan_devices() -> Result<Vec<DeviceInfo>> {
     registry.clear();
     let mut result = Vec::with_capacity(found.len());
     for item in found {
+        let device = Arc::new(Mutex::new(item));
+        // Populate capabilities and firmware metadata before returning the scan
+        // result. The Candle protocol exposes these through control transfers,
+        // so a discovery-only path cannot provide a truthful CAN-FD capability.
+        if let Ok(backend) = DeviceBackend::open(device.clone()) {
+            let _ = backend.close();
+        }
+        let snapshot = device
+            .lock()
+            .map_err(|_| Error::from_reason("device registry poisoned"))?
+            .clone();
         let info = DeviceInfo {
-            path: item.path.clone(),
-            friendly_name: item.friendly_name.clone(),
-            interface_number: item.interface_number,
+            path: snapshot.path.clone(),
+            friendly_name: snapshot.friendly_name.clone(),
+            interface_number: snapshot.interface_number,
+            bt_const: capability_info(snapshot.bt_const),
+            data_bt_const: capability_info(snapshot.data_bt_const),
+            dconf: CandleDeviceConfigInfo {
+                icount: snapshot.device_config.icount,
+                sw_version: snapshot.device_config.sw_version,
+                hw_version: snapshot.device_config.hw_version,
+            },
         };
-        registry.insert(item.path.clone(), Arc::new(Mutex::new(item)));
+        registry.insert(snapshot.path.clone(), device);
         result.push(info);
     }
     Ok(result)

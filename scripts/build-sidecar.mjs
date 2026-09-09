@@ -107,6 +107,28 @@ await esbuild.build({
   logLevel: 'warning'
 })
 
+// The SOME/IP compatibility facade uses a child process, so its worker must be
+// emitted beside index.cjs. It imports the same Rust-backed client and resolves
+// native/<addon>.node through loadNative(); no SWIG/C++ worker is copied.
+await esbuild.build({
+  entryPoints: [path.join(root, 'src/main/vsomeip/worker.ts')],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  target: 'node22',
+  outfile: path.join(root, 'out/sidecar/vsomeip.js'),
+  alias: {
+    electron: path.join(root, 'src/main/electron-shim.ts'),
+    '@electron-toolkit/utils': path.join(root, 'src/main/toolkit-shim.ts'),
+    'electron-log': path.join(root, 'src/main/electron-log-shim.ts'),
+    'electron-log/main': path.join(root, 'src/main/electron-log-shim.ts'),
+    src: path.join(root, 'src')
+  },
+  plugins: [assetPlugin, rawPlugin, nativePlugin],
+  define: { 'import.meta.env': '{}' },
+  logLevel: 'warning'
+})
+
 const nativeDst = path.join(root, 'out/sidecar/native')
 fs.mkdirSync(nativeDst, { recursive: true })
 for (const nativeFile of nativeFiles) {

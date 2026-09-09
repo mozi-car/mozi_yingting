@@ -1,0 +1,131 @@
+{
+  "generatedAt": "2026-09-09T13:21:58.594Z",
+  "platform": "win32",
+  "results": [
+    {
+      "module": "candle",
+      "operation": "scanDevices",
+      "result": []
+    },
+    {
+      "module": "peak",
+      "operation": "LoadDll/IsLoaded",
+      "result": true
+    },
+    {
+      "module": "peak",
+      "operation": "GetValue(channel-condition)",
+      "result": 19
+    },
+    {
+      "module": "peak",
+      "operation": "Uninitialize(invalid-or-unused-channel)",
+      "result": 1
+    },
+    {
+      "module": "kvaser",
+      "operation": "LoadDll/IsLoaded",
+      "result": true
+    },
+    {
+      "module": "kvaser",
+      "operation": "canInitializeLibrary",
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "module": "kvaser",
+      "operation": "canGetNumberOfChannels",
+      "result": {
+        "error": "canGetNumberOfChannels failed: -16"
+      }
+    },
+    {
+      "module": "kvaser",
+      "operation": "canUnloadLibrary",
+      "result": 0
+    },
+    {
+      "module": "zlg",
+      "operation": "LoadDll/IsLoaded",
+      "result": true
+    },
+    {
+      "module": "zlg",
+      "operation": "ZCAN_OpenDevice(invalid-safe)",
+      "result": 0
+    },
+    {
+      "module": "vector",
+      "operation": "LoadDll/IsLoaded",
+      "result": true
+    },
+    {
+      "module": "vector",
+      "operation": "xlOpenDriver",
+      "result": 0
+    },
+    {
+      "module": "vector",
+      "operation": "xlGetDriverConfig",
+      "result": 0
+    },
+    {
+      "module": "vector",
+      "operation": "xlCloseDriver",
+      "result": 0
+    },
+    {
+      "module": "toomoss",
+      "operation": "LoadDll/IsLoaded",
+      "result": true
+    },
+    {
+      "module": "toomoss",
+      "operation": "USB_ScanDevice",
+      "result": 0
+    },
+    {
+      "module": "kvaserLin",
+      "operation": "LoadDll/IsLoaded",
+      "result": true
+    },
+    {
+      "module": "kvaserLin",
+      "operation": "linInitializeLibrary",
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "module": "kvaserLin",
+      "operation": "linUnloadLibrary",
+      "result": {
+        "ok": true
+      }
+    },
+    {
+      "module": "peakLin",
+      "operation": "LoadDll/IsLoaded",
+      "result": true
+    },
+    {
+      "module": "peakLin",
+      "operation": "LIN_GetAvailableHardware",
+      "result": {
+        "error": "PEAK LIN error 1002"
+      }
+    },
+    {
+      "module": "toomossLin",
+      "operation": "LoadDll/IsLoaded",
+      "result": true
+    },
+    {
+      "module": "toomossLin",
+      "operation": "USB_ScanDevice",
+      "result": 0
+    }
+  ]
+}

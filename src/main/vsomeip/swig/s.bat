@@ -1,1 +1,0 @@
-D:/code/artifact/swig -I"./../inc" -c++ -javascript -napi -v ./vsomeip.i 

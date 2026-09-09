@@ -268,7 +268,7 @@ pub const can_fdmsg_brs: u32 = 0x0200;
 #[napi(js_name = "canOPEN_ACCEPT_VIRTUAL")]
 pub const can_open_accept_virtual: i32 = 0x0020;
 #[napi(js_name = "canOPEN_CAN_FD")]
-pub const can_open_can_fd: i32 = 0x0200;
+pub const can_open_can_fd: i32 = 0x0400;
 #[napi(js_name = "canDRIVER_NORMAL")]
 pub const can_driver_normal: i32 = 4;
 #[napi(js_name = "canDRIVER_SILENT")]
@@ -448,8 +448,12 @@ pub fn can_write(h: i32, id: i64, data: &ByteArray, dlc: u32, flags: u32) -> Res
     default_api().write(h, id, data, dlc, flags)
 }
 #[napi(js_name = "canGetErrorText")]
-pub fn can_get_error_text(status: i32) -> Result<Buffer> {
-    default_api().error_text(status)
+pub fn can_get_error_text(status: i32, mut buffer: Buffer) -> Result<i32> {
+    let text = default_api().error_text(status)?;
+    let copy_len = text.len().min(buffer.len().saturating_sub(1));
+    buffer[..copy_len].copy_from_slice(&text[..copy_len]);
+    if buffer.len() > copy_len { buffer[copy_len] = 0; }
+    Ok(0)
 }
 #[napi(js_name = "canGetNumberOfChannels")]
 pub fn can_get_number_of_channels() -> Result<i32> {
@@ -482,9 +486,14 @@ static CALLBACKS: OnceLock<Mutex<HashMap<String, CallbackTask>>> = OnceLock::new
 fn callbacks() -> &'static Mutex<HashMap<String, CallbackTask>> {
     CALLBACKS.get_or_init(|| Mutex::new(HashMap::new()))
 }
+static CONTEXT_HANDLES: OnceLock<Mutex<HashMap<String, i32>>> = OnceLock::new();
+fn context_handles() -> &'static Mutex<HashMap<String, i32>> {
+    CONTEXT_HANDLES.get_or_init(|| Mutex::new(HashMap::new()))
+}
 #[napi(js_name = "CreateTSFN")]
 pub fn create_tsfn(handle: i32, id: String, callback: Function<'static>) -> Result<()> {
     free_tsfn(id.clone())?;
+    context_handles().lock().map_err(|_| Error::from_reason("context lock poisoned"))?.insert(id.clone(), handle);
     let tsfn: ThreadsafeFunction<()> = callback
         .build_threadsafe_function()
         .callee_handled()
@@ -525,6 +534,7 @@ pub fn create_tsfn(handle: i32, id: String, callback: Function<'static>) -> Resu
 }
 #[napi(js_name = "FreeTSFN")]
 pub fn free_tsfn(id: String) -> Result<()> {
+    context_handles().lock().map_err(|_| Error::from_reason("context lock poisoned"))?.remove(&id);
     if let Some(mut task) = callbacks()
         .lock()
         .map_err(|_| Error::from_reason("callback lock poisoned"))?
@@ -551,9 +561,13 @@ pub fn start_period_send(id: String, msg: Object, period: f64, duration: f64) ->
     if !default_api().is_loaded()? {
         return Err(Error::from_reason("Kvaser CANlib DLL is not loaded"));
     }
-    let handle: i32 = id
-        .parse()
-        .map_err(|_| Error::from_reason("Kvaser context id must be channel handle"))?;
+    let handle = context_handles()
+        .lock()
+        .map_err(|_| Error::from_reason("context lock poisoned"))?
+        .get(&id)
+        .copied()
+        .or_else(|| id.parse().ok())
+        .ok_or_else(|| Error::from_reason("Kvaser context id is not registered"))?;
     let can_id: i64 = msg.get("id")?.unwrap_or(0i64);
     let extend: bool = msg.get("extendId")?.unwrap_or(false);
     let remote: bool = msg.get("remoteFrame")?.unwrap_or(false);

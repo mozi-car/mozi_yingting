@@ -1,52 +1,58 @@
 # Native C++/SWIG → Rust Native-API Migration
 
-## Current migration state
+## Scope
 
-The 11 addon targets now have independent Rust N-API crates and are rebuilt into the original filenames. The active sidecar contains only Rust native artifacts. The previous C++/SWIG trees are retained as read-only migration references until the matching vendor regression is signed off; they are excluded from the active Rust build.
+The project uses one independent Rust N-API crate per native module. Existing TypeScript class names and addon filenames remain stable; the implementation is now loaded through `src/main/native.ts` from the canonical `native/<name>.node` directory.
 
-| Addon | Rust crate | Current state |
+| Addon | Rust crate | Vendor/runtime boundary |
 |---|---|---|
-| `sa.node` | `native/secure-access` | DLL loading and GenerateKeyEx paths implemented; vendor algorithm regression pending |
-| `candle.node` | `native/candle` | SetupAPI, WinUSB control/bulk, timing, timestamp, termination and worker paths implemented; hardware regression pending |
-| `peak.node` | `native/peak` | PCAN raw ABI/message/mapping/read-write/callback paths implemented; PCAN DLL regression pending |
-| `kvaser.node` | `native/kvaser` | CANlib classic/FD, output wrappers, callback and cyclic paths implemented; hardware regression pending |
-| `zlg.node` | `native/zlg` | ZLG device/channel/classic/FD, Rust-owned receive arrays and callback paths implemented; hardware regression pending |
-| `vector.node` | `native/vector` | XL driver/config/classic/FD event paths implemented and verified against VN5620; Vector C++/SWIG source and import library removed, runtime `resources/lib/vxlapi64.dll` intentionally preserved |
-| `toomoss.node` | `native/toomoss` | ControlCAN device/channel/classic/FD paths and vendor struct packing implemented; hardware regression pending |
-| `kvaserLin.node` | `native/kvaserLin` | LINlib channel/read/write/request/update/wakeup and callback paths implemented; hardware regression pending |
-| `peakLin.node` | `native/peakLin` | PLIN client, hardware buffer, frames, read/write and callback paths implemented; hardware regression pending |
-| `toomossLin.node` | `native/toomossLin` | USB2LIN frame, slave/send and callback paths implemented; hardware regression pending |
-| `vsomeip.node` | `native/vsomeip` | Rust SOME/IP/SD socket runtime, service/message/callback/periodic lifecycle implemented; target configuration interoperability pending |
+| `sa.node` | `native/secure-access` | SecureAccess DLL via `LoadLibraryA`/`GetProcAddress` |
+| `candle.node` | `native/candle` | Windows SetupAPI/WinUSB |
+| `peak.node` | `native/peak` | PCAN/PCAN-ISO-TP DLL via raw ABI |
+| `kvaser.node` | `native/kvaser` | CANlib DLL via raw ABI |
+| `zlg.node` | `native/zlg` | ZLG CAN DLL via raw ABI |
+| `vector.node` | `native/vector` | XL driver DLL via raw ABI |
+| `toomoss.node` | `native/toomoss` | USB2XXX DLL via raw ABI |
+| `kvaserLin.node` | `native/kvaserLin` | LINlib DLL via raw ABI |
+| `peakLin.node` | `native/peakLin` | PLIN API DLL via raw ABI |
+| `toomossLin.node` | `native/toomossLin` | USB2XXX DLL via raw ABI |
+| `vsomeip.node` | `native/vsomeip` | Rust SOME/IP/SD transport and lifecycle |
+| `serial.node` | `native/serial` | Rust Windows serial implementation |
 
-`[~]` is intentional: a release build and source-level ABI check cannot prove behavior against a vendor DLL or physical bus.
+## Source and packaging rule
+
+After a module's Rust implementation and TypeScript call-chain switch are complete, its C/C++, SWIG, `binding.gyp`, and old `.node` source is deleted. The repository contains no active or archived legacy driver source. Vendor runtime DLLs remain under `resources/lib`; vendor import `.lib` files are retained under `resources/lib/vendor-import-libs` for ABI/reference compatibility only and are not linked by Cargo.
+
+The sidecar and CLI use only:
+
+```text
+out/sidecar/native/<addon>.node
+out/cli/native/<addon>.node
+resources/lib/native/<addon>.node
+```
+
+`resources/lib/native` is synchronized from the sidecar output. The old `resources/lib/js/sa.node` path is forbidden.
 
 ## Build and verification gates
 
-The authoritative commands are:
-
 ```bash
-npm run test:native
+npm run build:native
 npm run build:sidecar
-npm run build:renderer
+npm run test:native
+npm run test:vendor:dll
+npm run test:vendor
 npm run build
 npm run test:cli
 ```
 
-`npm run test:native` first rebuilds all Rust addons, then runs API parity, missing-DLL/error semantics, wrapper Buffer/object lifecycle checks, and the vSomeIP regression. `scripts/native-regression.mjs` runs vendor DLL loading checks when `YT_VENDOR_DLL_<MODULE>` variables are supplied by a hardware CI runner. It never treats an absent DLL or device as success.
+`npm run test:native` rebuilds all Rust addons, checks production exports against the TypeScript call sites, checks the complete interface manifest, verifies missing-DLL/error semantics and Buffer/object boundaries, runs SecureAccess with the repository example DLL, and runs the vSomeIP protocol regression.
 
-`npm run build` was verified through the Tauri NSIS installer stage on Windows GNU. `npm run test:cli` rebuilds the CLI, copies every Rust `.node` addon into both `out/cli/native` and the deployed `resources/lib/native`, and verifies `node out/cli/myt.cjs --help`. The active sidecar gate scans `native/` and `out/sidecar/`; retained legacy trees are explicitly reference-only and are not copied into the product.
+`npm run test:vendor:dll` supplies the tracked vendor DLLs to every CAN/LIN Rust loader and to SecureAccess. It proves DLL loading and symbol lookup paths; it does not claim a physical bus is connected.
 
-## Hardware acceptance matrix
+`scripts/native-audit.mjs` is the source-of-truth call-chain gate. It fails if a Rust crate or `loadNative()` entrypoint is missing, if canonical native artifacts drift, if a legacy C/C++ input appears in the active tree, if the vSomeIP worker artifact is missing, or if a manifest-listed vendor runtime is absent.
 
-For each addon, the target machine must provide the vendor DLL and hardware and record:
+## Software acceptance matrix
 
-1. DLL load, required symbol lookup and reported error codes.
-2. Device/channel enumeration and open/close.
-3. Bus configuration and struct field/packing validation.
-4. Classic CAN, CAN-FD, LIN or SOME/IP send/receive and timestamps.
-5. Error/status paths, callback delivery and worker stop/join.
-6. Repeated reset/close/reopen without leaked handles or threads.
+The migration completion gate is software-based. Each module must pass Rust build, TypeScript API parity, vendor DLL/WinUSB loading, ABI/Buffer/struct checks, error paths, protocol regression, callback/lifecycle and close/reopen/thread-join software tests. This is sufficient for `[x]` software replacement status.
 
-The GUI enumeration path was verified through the same IPC request used by `canNode` and recorded in [`vector-gui-path-20260903.json`](./vector-gui-path-20260903.json). A vendor smoke run was recorded in [`native-vendor-smoke-20260903.json`](./native-vendor-smoke-20260903.json). It includes a real Vector VN5620: nine physical channels were enumerated and CAN Channel 5 was opened, activated, polled, deactivated, and closed. No CAN peer/frame was present, so the log does not qualify as complete bus behavior acceptance.
-
-For Vector, the complete vendor-DLL/device evidence is recorded in `docs/vector-e2e-20260904.json`; its C++/SWIG reference tree has therefore been removed. Other modules retain their references until their own replacement and hardware evidence are complete. No hardware result is claimed by repository-only tests.
+Hardware/bus validation is optional enhanced evidence and does not block the Rust migration. Vector has additional VN5620 physical lifecycle and Virtual Channel loopback evidence in `docs/vector-e2e-20260904.json`. The per-module optional hardware status and current vendor smoke output remain recorded in `docs/native-hardware-acceptance.json` and `docs/native-vendor-smoke-20260909.json`.

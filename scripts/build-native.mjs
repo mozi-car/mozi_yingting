@@ -20,12 +20,23 @@ const modules = [
   { name: 'vsomeip', directory: 'native/vsomeip', packageName: 'vsomeip' },
   { name: 'serial', directory: 'native/serial', packageName: 'serial' }
 ]
-const target = 'x86_64-pc-windows-gnu'
-const nodeLib = path.join(process.env.TEMP ?? process.env.TMP ?? root, 'yingting-rust-node-lib')
 const cargo = process.platform === 'win32' ? 'cargo.exe' : 'cargo'
+const nodeLib = path.join(process.env.TEMP ?? process.env.TMP ?? root, 'yingting-rust-node-lib')
+function commandAvailable(command) {
+  try {
+    execFileSync(process.platform === 'win32' ? 'where.exe' : 'which', [command], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+const defaultTarget = process.platform === 'win32'
+  ? (commandAvailable('x86_64-w64-mingw32-gcc') ? 'x86_64-pc-windows-gnu' : 'x86_64-pc-windows-msvc')
+  : process.platform === 'darwin' ? 'aarch64-apple-darwin' : 'x86_64-unknown-linux-gnu'
+const target = process.env.RUST_TARGET || defaultTarget
 
 function ensureNodeImportLibrary() {
-  if (process.platform !== 'win32' || fs.existsSync(path.join(nodeLib, 'libnode.a'))) return
+  if (process.platform !== 'win32' || target !== 'x86_64-pc-windows-gnu' || fs.existsSync(path.join(nodeLib, 'libnode.a'))) return
   fs.mkdirSync(nodeLib, { recursive: true })
   const nodeExe = process.execPath
   const nodeDll = path.join(nodeLib, 'libnode.dll')
@@ -43,8 +54,8 @@ function ensureNodeImportLibrary() {
 }
 
 ensureNodeImportLibrary()
-if (process.platform === 'win32' && !fs.existsSync(path.join(nodeLib, 'libnode.a'))) {
-  throw new Error('[native] libnode.a is missing; refusing to skip Rust native addon compilation')
+if (process.platform === 'win32' && target === 'x86_64-pc-windows-gnu' && !fs.existsSync(path.join(nodeLib, 'libnode.a'))) {
+  throw new Error('[native] libnode.a is missing for GNU target; install MinGW/binutils or set RUST_TARGET=x86_64-pc-windows-msvc')
 }
 const output = path.join(root, 'out/sidecar/native')
 fs.mkdirSync(output, { recursive: true })
@@ -57,7 +68,9 @@ for (const module of modules) {
     env: {
       ...process.env,
       LIBNODE_PATH: nodeLib,
-      RUSTFLAGS: `${process.env.RUSTFLAGS ?? ''} -L native=${nodeLib}`.trim()
+      RUSTFLAGS: target === 'x86_64-pc-windows-gnu'
+        ? `${process.env.RUSTFLAGS ?? ''} -L native=${nodeLib}`.trim()
+        : (process.env.RUSTFLAGS ?? '')
     },
     stdio: 'inherit'
   })

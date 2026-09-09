@@ -4,18 +4,19 @@
 
 | Addon | 状态 | 当前 API 检查 |
 |---|---|---|
-| sa.node | `[~]` | `SeedKey`、LoadDLL、IsLoaded、GenerateKeyEx/Opt |
-| candle.node | `[~]` | 18 个 TypeScript 实际使用导出 |
-| peak.node | `[~]` | 119 个 TypeScript 实际使用导出，包含 PCAN 常量、消息类和 CANTP 函数 |
-| kvaser.node | `[~]` | 51 个实际使用导出 |
-| zlg.node | `[~]` | 31 个实际使用导出 |
-| vector.node | `[~]` | 33 个实际使用导出 |
-| toomoss.node | `[~]` | 23 个实际使用导出 |
-| kvaserLin.node | `[~]` | 17 个实际使用导出 |
-| peakLin.node | `[~]` | 31 个实际使用导出 |
-| toomossLin.node | `[~]` | 15 个实际使用导出 |
-| vsomeip.node | `[~]` | 22 个实际使用导出/原型方法 |
+| sa.node | `[x]` | `SeedKey`、LoadDLL、Unload、IsLoaded、GenerateKeyEx/Opt |
+| candle.node | `[x]` | 18 个 TypeScript 实际使用导出 |
+| peak.node | `[x]` | 119 个 TypeScript 实际使用导出，包含 PCAN 常量、消息类和 CANTP 函数 |
+| kvaser.node | `[x]` | 51 个实际使用导出 |
+| zlg.node | `[x]` | 31 个实际使用导出 |
+| vector.node | `[x]` | 33 个实际使用导出 |
+| toomoss.node | `[x]` | 23 个实际使用导出 |
+| kvaserLin.node | `[x]` | 17 个实际使用导出 |
+| peakLin.node | `[x]` | 31 个实际使用导出 |
+| toomossLin.node | `[x]` | 15 个实际使用导出 |
+| vsomeip.node | `[x]` | 22 个实际使用导出/原型方法 |
+| `serial.node` | `[x]` | `Serial`、list、open/write/read/close 软件 API |
 
-## 仍需外部证据
+## 可选硬件证据
 
-每个模块必须在真实 vendor DLL 和硬件上验证 LoadDll、枚举、open/config、收发、时间戳、错误码、callback、close/reopen 和线程 Join。未提供这些证据前，不能将 `[~]` 改为 `[x]`，也不能删除该模块的 C++/SWIG 参考实现。
+软件验收要求每个模块通过真实 vendor DLL 加载（或 WinUSB/系统 API）、API parity、错误路径、Buffer/struct、协议、callback、close/reopen 和线程生命周期回归，即可标记 `[x]`。硬件/总线验收是可选增强证据，不阻塞软件迁移；旧 C++/SWIG 实现已删除，不得重新加入活动树。

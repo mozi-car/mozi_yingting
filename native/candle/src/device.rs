@@ -158,9 +158,11 @@ fn registry_string(
 const REQUEST_HOST_FORMAT: u8 = 0;
 const REQUEST_BITTIMING: u8 = 1;
 const REQUEST_MODE: u8 = 2;
+const REQUEST_BITTIMING_CAPABILITY: u8 = 4;
 const REQUEST_DEVICE_CONFIG: u8 = 5;
 const REQUEST_TIMESTAMP: u8 = 6;
 const REQUEST_DATA_BITTIMING: u8 = 10;
+const REQUEST_BITTIMING_CAPABILITY_EXTENDED: u8 = 11;
 const REQUEST_SET_TERMINATION: u8 = 16;
 const REQUEST_GET_TERMINATION: u8 = 15;
 const REQUEST_INTERFACE_ENDPOINT: u8 = 17;
@@ -178,11 +180,22 @@ pub struct Device {
     pub bulk_in_pipe: u8,
     pub bulk_out_pipe: u8,
     pub timestamp_us: u32,
+    pub device_config: crate::frame::CandleDeviceConfig,
+    pub bt_const: crate::frame::CandleCapability,
+    pub data_bt_const: crate::frame::CandleCapability,
     pub started_channels: u32,
 }
 
 pub struct DeviceBackend {
     pub device: DeviceRef,
+}
+
+impl Drop for DeviceBackend {
+    fn drop(&mut self) {
+        // Closing is idempotent, so every Rust backend owns its WinUSB handle
+        // even when the JavaScript caller forgets an explicit close call.
+        let _ = self.close();
+    }
 }
 
 impl DeviceBackend {
@@ -256,6 +269,7 @@ impl DeviceBackend {
         };
         backend.control_out(REQUEST_HOST_FORMAT, 1, 0, &0x0000_beefu32.to_le_bytes())?;
         backend.refresh_config()?;
+        backend.refresh_capabilities(0)?;
         Ok(backend)
     }
 
@@ -269,6 +283,9 @@ impl DeviceBackend {
         }
         value.winusb_handle = 0;
         value.device_handle = 0;
+        value.bulk_in_pipe = 0;
+        value.bulk_out_pipe = 0;
+        value.started_channels = 0;
         value.opened = false;
         Ok(())
     }
@@ -331,14 +348,53 @@ impl DeviceBackend {
     }
 
     fn refresh_config(&self) -> Result<(), String> {
-        let bytes = self.control_in(REQUEST_TIMESTAMP, 1, self.interface_number() as u16, 4)?;
-        let timestamp = u32::from_le_bytes(bytes[..4].try_into().unwrap());
-        self.device
-            .lock()
-            .map_err(|_| "device lock poisoned")?
-            .timestamp_us = timestamp;
+        let config = self.control_in(REQUEST_DEVICE_CONFIG, 1, self.interface_number() as u16, 12)?;
+        let timestamp = self.control_in(REQUEST_TIMESTAMP, 1, self.interface_number() as u16, 4)?;
+        let device_config = crate::frame::CandleDeviceConfig {
+            reserved1: config[0], reserved2: config[1], reserved3: config[2], icount: config[3],
+            sw_version: u32::from_le_bytes(config[4..8].try_into().unwrap()),
+            hw_version: u32::from_le_bytes(config[8..12].try_into().unwrap()),
+        };
+        let mut value = self.device.lock().map_err(|_| "device lock poisoned")?;
+        value.device_config = device_config;
+        value.timestamp_us = u32::from_le_bytes(timestamp[..4].try_into().unwrap());
         Ok(())
     }
+
+    fn refresh_capabilities(&self, channel: u8) -> Result<(), String> {
+        let bytes = self.control_in(REQUEST_BITTIMING_CAPABILITY, channel as u16, self.interface_number() as u16, 40)?;
+        let capability = Self::parse_capability(&bytes, 0)?;
+        let extended = self.control_in(REQUEST_BITTIMING_CAPABILITY_EXTENDED, channel as u16, self.interface_number() as u16, 72)?;
+        let data_capability = Self::parse_extended_data_capability(&extended)?;
+        let mut value = self.device.lock().map_err(|_| "device lock poisoned")?;
+        value.bt_const = capability;
+        value.data_bt_const = data_capability;
+        Ok(())
+    }
+
+fn parse_capability(bytes: &[u8], offset: usize) -> Result<crate::frame::CandleCapability, String> {
+    if bytes.len() < offset + 40 { return Err("Candle capability response too short".into()); }
+    let mut values = [0u32; 10];
+    for (index, value) in values.iter_mut().enumerate() {
+        let start = offset + index * 4;
+        *value = u32::from_le_bytes(bytes[start..start + 4].try_into().unwrap());
+    }
+    Ok(crate::frame::CandleCapability {
+        feature: values[0], fclk_can: values[1], tseg1_min: values[2], tseg1_max: values[3],
+        tseg2_min: values[4], tseg2_max: values[5], sjw_max: values[6], brp_min: values[7],
+        brp_max: values[8], brp_inc: values[9],
+    })
+}
+
+fn parse_extended_data_capability(bytes: &[u8]) -> Result<crate::frame::CandleCapability, String> {
+    if bytes.len() < 72 { return Err("Candle extended capability response too short".into()); }
+    let word = |index: usize| u32::from_le_bytes(bytes[index * 4..index * 4 + 4].try_into().unwrap());
+    Ok(crate::frame::CandleCapability {
+        feature: word(0), fclk_can: word(1), tseg1_min: word(10), tseg1_max: word(11),
+        tseg2_min: word(12), tseg2_max: word(13), sjw_max: word(14), brp_min: word(15),
+        brp_max: word(16), brp_inc: word(17),
+    })
+}
 
     fn interface_number(&self) -> u8 {
         self.device.lock().map(|d| d.interface_number).unwrap_or(0)

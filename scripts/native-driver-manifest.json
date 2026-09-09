@@ -1,0 +1,62 @@
+{
+  "sa": {
+    "crate": "native/secure-access",
+    "typescript": ["src/main/worker/secureAccess/index.ts"],
+    "vendor": ["resources/examples/secure_access_dll/dll/GenerateKeyEx.dll", "resources/examples/secure_access_dll/dll/GenerateKeyExOpt.dll"]
+  },
+  "candle": {
+    "crate": "native/candle",
+    "typescript": ["src/main/docan/candle/index.ts"],
+    "vendor": ["WinUSB/SetupAPI and CandleLight hardware"]
+  },
+  "peak": {
+    "crate": "native/peak",
+    "typescript": ["src/main/docan/peak/index.ts"],
+    "vendor": ["resources/lib/PCANBasic.dll", "resources/lib/PCAN-ISO-TP.dll"]
+  },
+  "kvaser": {
+    "crate": "native/kvaser",
+    "typescript": ["src/main/docan/kvaser/index.ts"],
+    "vendor": ["resources/lib/canlib32.dll"]
+  },
+  "zlg": {
+    "crate": "native/zlg",
+    "typescript": ["src/main/docan/zlg/index.ts"],
+    "vendor": ["resources/lib/zlgcan.dll"]
+  },
+  "vector": {
+    "crate": "native/vector",
+    "typescript": ["src/main/docan/vector/index.ts", "src/main/dolin/vector/index.ts"],
+    "vendor": ["resources/lib/vxlapi64.dll"]
+  },
+  "toomoss": {
+    "crate": "native/toomoss",
+    "typescript": ["src/main/docan/toomoss/index.ts"],
+    "vendor": ["resources/lib/USB2XXX.dll"]
+  },
+  "kvaserLin": {
+    "crate": "native/kvaserLin",
+    "typescript": ["src/main/dolin/kvaser/index.ts"],
+    "vendor": ["resources/lib/linlib.dll"]
+  },
+  "peakLin": {
+    "crate": "native/peakLin",
+    "typescript": ["src/main/dolin/peak/index.ts"],
+    "vendor": ["resources/lib/PLinApi.dll"]
+  },
+  "toomossLin": {
+    "crate": "native/toomossLin",
+    "typescript": ["src/main/dolin/toomoss/index.ts"],
+    "vendor": ["resources/lib/USB2XXX.dll"]
+  },
+  "vsomeip": {
+    "crate": "native/vsomeip",
+    "typescript": ["src/main/vsomeip/client.ts"],
+    "vendor": ["resources/lib/vsomeip3.dll", "resources/lib/vsomeip3-sd.dll"]
+  },
+  "serial": {
+    "crate": "native/serial",
+    "typescript": ["src/main/serial/rust.ts", "src/main/docan/slcan/index.ts"],
+    "vendor": ["Windows serial devices / platform serial APIs"]
+  }
+}

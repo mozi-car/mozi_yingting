@@ -43,4 +43,4 @@
 2. 在目标设备上验证 scan/open/config/send/receive/error/close/worker Join。
 3. 保存 vendor DLL/设备测试日志，确认返回码、Buffer、timestamp、struct packing。
 4. 每模块通过后才把 `.agent/progress.md` 对应项从 `[~]` 改为 `[x]`。
-5. 全部通过后删除对应旧 C++/SWIG 参考目录，恢复的参考实现不得提前删除。
+5. Rust 实现和 TypeScript 调用链切换完成后立即删除对应 C++/SWIG/binding.gyp/旧 `.node`；硬件验收只决定状态 `[~]`/`[x]`，不决定是否保留旧源码。

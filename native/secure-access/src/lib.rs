@@ -29,11 +29,7 @@ struct SeedKeyState {
 
 impl Drop for SeedKeyState {
     fn drop(&mut self) {
-        if !self.module.is_null() {
-            // SAFETY: module is a handle returned by LoadLibraryA and is owned by this state.
-            unsafe { FreeLibrary(self.module) };
-            self.module = ptr::null_mut();
-        }
+        unload_module(self);
     }
 }
 
@@ -63,18 +59,28 @@ impl SeedKey {
                 }
             }
         }
-        let module = unsafe { LoadLibraryA(path.as_ptr() as *const u8) };
-        if module.is_null() {
-            return Err(Error::from_reason("failed to load SecureAccess DLL"));
-        }
+        // Match the original wrapper's replacement semantics: a failed reload
+        // leaves the object unloaded instead of silently keeping an old DLL.
         let mut state = self
             .state
             .lock()
             .map_err(|_| Error::from_reason("SeedKey state poisoned"))?;
-        if !state.module.is_null() {
-            unsafe { FreeLibrary(state.module) };
+        unload_module(&mut state);
+        let module = unsafe { LoadLibraryA(path.as_ptr() as *const u8) };
+        if module.is_null() {
+            return Err(Error::from_reason("failed to load SecureAccess DLL"));
         }
         state.module = module;
+        Ok(())
+    }
+
+    #[napi(js_name = "Unload")]
+    pub fn unload(&self) -> Result<()> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| Error::from_reason("SeedKey state poisoned"))?;
+        unload_module(&mut state);
         Ok(())
     }
 
@@ -104,17 +110,19 @@ impl SeedKey {
         let function = get_function::<GenerateKeyExOptFn>(state.module, b"GenerateKeyExOpt\0")?;
         let variant = c_string_bytes(&variant)?;
         let options = c_string_bytes(&options)?;
+        let seed_len = checked_len(seed.len(), "seed")?;
         let mut output = key.to_vec();
+        let output_len = checked_len(output.len(), "key output")?;
         let mut actual_size = 0u32;
         let result = unsafe {
             function(
                 seed.as_ref().as_ptr(),
-                seed.len() as u32,
+                seed_len,
                 security_level,
                 variant.as_ptr() as *const c_char,
                 options.as_ptr() as *const c_char,
                 output.as_mut_ptr(),
-                output.len() as u32,
+                output_len,
                 &mut actual_size,
             )
         };
@@ -123,7 +131,12 @@ impl SeedKey {
                 "GenerateKeyExOpt failed with error code {result}"
             )));
         }
-        output.truncate(actual_size.min(output.len() as u32) as usize);
+        if actual_size > output_len {
+            return Err(Error::from_reason(format!(
+                "GenerateKeyExOpt reported {actual_size} bytes for a {output_len} byte buffer"
+            )));
+        }
+        output.truncate(actual_size as usize);
         Ok(output.into())
     }
 
@@ -141,16 +154,18 @@ impl SeedKey {
             .map_err(|_| Error::from_reason("SeedKey state poisoned"))?;
         let function = get_function::<GenerateKeyExFn>(state.module, b"GenerateKeyEx\0")?;
         let variant = c_string_bytes(&variant)?;
+        let seed_len = checked_len(seed.len(), "seed")?;
         let mut output = key.to_vec();
+        let output_len = checked_len(output.len(), "key output")?;
         let mut actual_size = 0u32;
         let result = unsafe {
             function(
                 seed.as_ref().as_ptr(),
-                seed.len() as u32,
+                seed_len,
                 security_level,
                 variant.as_ptr() as *const c_char,
                 output.as_mut_ptr(),
-                output.len() as u32,
+                output_len,
                 &mut actual_size,
             )
         };
@@ -159,9 +174,27 @@ impl SeedKey {
                 "GenerateKeyEx failed with error code {result}"
             )));
         }
-        output.truncate(actual_size.min(output.len() as u32) as usize);
+        if actual_size > output_len {
+            return Err(Error::from_reason(format!(
+                "GenerateKeyEx reported {actual_size} bytes for a {output_len} byte buffer"
+            )));
+        }
+        output.truncate(actual_size as usize);
         Ok(output.into())
     }
+}
+
+fn unload_module(state: &mut SeedKeyState) {
+    if !state.module.is_null() {
+        // SAFETY: module is a handle returned by LoadLibraryA and is owned by this state.
+        unsafe { FreeLibrary(state.module) };
+        state.module = ptr::null_mut();
+    }
+}
+
+fn checked_len(value: usize, label: &str) -> Result<u32> {
+    u32::try_from(value)
+        .map_err(|_| Error::from_reason(format!("{label} buffer is larger than the vendor ABI allows")))
 }
 
 fn c_string_bytes(value: &[u8]) -> Result<Vec<u8>> {
@@ -179,7 +212,25 @@ fn get_function<T>(module: HMODULE, name: &[u8]) -> Result<T> {
     }
     // SAFETY: module is a valid loaded module and name is NUL-terminated.
     let address = unsafe { GetProcAddress(module, name.as_ptr() as *const u8) };
-    let address = address.ok_or_else(|| Error::from_reason("function not found in DLL"))?;
+    let display_name = String::from_utf8_lossy(name.strip_suffix(&[0]).unwrap_or(name));
+    let address = address.ok_or_else(|| Error::from_reason(format!("function not found in DLL: {display_name}")))?;
     // SAFETY: caller selects T to match the documented DLL export signature.
     Ok(unsafe { std::mem::transmute_copy::<unsafe extern "system" fn() -> isize, T>(&address) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{c_string_bytes, checked_len};
+
+    #[test]
+    fn vendor_string_arguments_are_nul_terminated_without_embedded_nul() {
+        assert_eq!(c_string_bytes(b"variant").unwrap(), b"variant\0");
+        assert!(c_string_bytes(b"bad\0variant").is_err());
+    }
+
+    #[test]
+    fn lengths_are_checked_against_the_u32_vendor_abi() {
+        assert_eq!(checked_len(7, "seed").unwrap(), 7);
+        assert!(checked_len((u32::MAX as usize) + 1, "seed").is_err());
+    }
 }

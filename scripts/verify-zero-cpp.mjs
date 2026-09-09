@@ -3,10 +3,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-// Scan source and generated product artifacts. Cargo target and npm's dependency
-// cache are build inputs; `out` is intentionally scanned because it is shipped.
-const ignored = new Set(['.git', 'node_modules', 'target'])
-const extensions = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hxx', '.h++', '.hpp', '.ipp', '.inl', '.tcc', '.i', '.ii', '.ixx', '.m', '.mm', '.node', '.lib', '.a', '.so', '.dylib'])
+// Scan source and generated product artifacts. Cargo target is a build cache,
+// but `out` is shipped and must include no C/C++ dependency tree. Replaced
+// modules have no migration archive; do not ignore out/sidecar/node_modules:
+// stale bindings-cpp there would still be delivered to users.
+const ignored = new Set(['.git', 'target'])
+const extensions = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hxx', '.h++', '.hpp', '.ipp', '.inl', '.tcc', '.i', '.ii', '.ixx', '.m', '.mm', '.node', '.lib', '.a', '.so', '.dylib', '.gyp', '.gypi'])
 const forbidden = []
 const inspected = []
 function walk(dir) {
@@ -14,7 +16,7 @@ function walk(dir) {
     if (ignored.has(entry.name)) continue
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) walk(full)
-    else if (extensions.has(path.extname(entry.name).toLowerCase()) || entry.name === 'binding.gyp') {
+    else if (extensions.has(path.extname(entry.name).toLowerCase()) || ['binding.gyp', 'CMakeLists.txt', 'Makefile'].includes(entry.name) || entry.name.endsWith('.bat')) {
       inspected.push(path.relative(root, full))
       const extension = path.extname(entry.name).toLowerCase()
       if (extension === '.node') {
@@ -31,18 +33,24 @@ function walk(dir) {
     }
   }
 }
-// Legacy C++/SWIG trees are retained as read-only migration references until the
-// corresponding Rust module has passed vendor regression. They are not build
-// inputs. Only the active Rust native tree and shipped sidecar are subject to the
-// zero-C++ gate.
-const activeRoots = [path.join(root, 'native'), path.join(root, 'out', 'sidecar')]
+// The TypeScript driver classes under docan/dolin are still the public
+// orchestration layer, but every native implementation must come from native/.
+// Scan those source roots too so a removed Rust migration cannot silently be
+// replaced by an old binding.gyp/SWIG artifact.
+const activeRoots = [
+  path.join(root, 'native'),
+  // All application source is active. This catches legacy vsomeip and
+  // SecureAccess bridges that do not live under docan/dolin.
+  path.join(root, 'src'),
+  path.join(root, 'out'),
+  path.join(root, 'resources', 'lib', 'native'),
+  path.join(root, 'resources', 'lib', 'js')
+]
 for (const activeRoot of activeRoots) {
   if (fs.existsSync(activeRoot)) walk(activeRoot)
 }
-// JavaScript tooling dependencies and retained migration references are outside
-// the product's active native implementation.
 if (forbidden.length) {
   console.error('Zero-C++ verification failed:\n' + forbidden.join('\n'))
   process.exit(1)
 }
-console.log(`Zero-C++ verification passed: scanned ${inspected.length} active native/product artifacts; retained C/C++/SWIG reference trees are excluded until their Rust replacements pass regression`)
+console.log(`Zero-C++ verification passed: scanned ${inspected.length} active source/product artifacts; all active native driver implementations are Rust`)

@@ -3,6 +3,8 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import interfaceManifest from './native-interface-manifest.json' with { type: 'json' }
+import driverManifest from './native-driver-manifest.json' with { type: 'json' }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 console.log('Rebuilding all Rust native addons before API verification')
@@ -19,7 +21,8 @@ const addons = {
   kvaserLin: ['LoadDll', 'linOpenChannel', 'linReadMessageWait', 'linWriteMessage', 'CreateTSFN', 'FreeTSFN'],
   peakLin: ['LoadDll', 'LIN_Read', 'LIN_Write', 'LIN_RegisterClient'],
   toomossLin: ['LoadDll', 'USB_ScanDevice', 'LIN_EX_Init', 'LIN_EX_GetMsg', 'SendLinMsg', 'CreateTSFN', 'FreeTSFN'],
-  vsomeip: ['Runtime', 'SomeipMessage', 'RegisterCallback', 'UnregisterCallback', 'Send', 'VsomeipCallbackWrapper', 'Application', 'offerService', 'stopOfferService', 'releaseService', 'requestService', 'subscribe', 'unsubscribe', 'clearAllHandler', 'registerMessageHandler', 'registerAvailabilityHandler', 'start', 'stop', 'sendMessage', 'startPeriodicMessage', 'stopPeriodicMessage', 'updatePeriodicMessage']
+  vsomeip: ['Runtime', 'SomeipMessage', 'RegisterCallback', 'UnregisterCallback', 'Send', 'VsomeipCallbackWrapper', 'Application', 'offerService', 'stopOfferService', 'releaseService', 'requestService', 'subscribe', 'unsubscribe', 'clearAllHandler', 'registerMessageHandler', 'registerAvailabilityHandler', 'start', 'stop', 'sendMessage', 'startPeriodicMessage', 'stopPeriodicMessage', 'updatePeriodicMessage'],
+  serial: ['Serial', 'list']
 }
 
 // Infer the complete runtime surface from the actual TypeScript call sites as
@@ -51,17 +54,55 @@ for (const relative of ['src/main/dolin/vector/index.ts']) {
 }
 
 if (!fs.existsSync(nativeDir)) throw new Error(`native addon directory missing: ${nativeDir}; run npm run build:native first`)
+const driverNames = Object.keys(addons).sort()
+const manifestDriverNames = Object.keys(driverManifest).sort()
+if (driverNames.join('|') !== manifestDriverNames.join('|')) {
+  throw new Error(`driver manifest/build list drift; build=${driverNames.join(',')} manifest=${manifestDriverNames.join(',')}`)
+}
+for (const [name, entry] of Object.entries(driverManifest)) {
+  if (!fs.existsSync(path.join(root, entry.crate, 'Cargo.toml'))) throw new Error(`${name}: Rust crate missing: ${entry.crate}`)
+  for (const source of entry.typescript) if (!fs.existsSync(path.join(root, source))) throw new Error(`${name}: TypeScript entrypoint missing: ${source}`)
+}
+const builtFiles = fs.readdirSync(nativeDir).filter((file) => file.endsWith('.node')).sort()
+const manifestFiles = Object.keys(interfaceManifest).sort()
+const missingManifestFiles = builtFiles.filter((file) => !manifestFiles.includes(file))
+const missingBuiltFiles = manifestFiles.filter((file) => !builtFiles.includes(file))
+if (missingManifestFiles.length || missingBuiltFiles.length) {
+  throw new Error(`native interface manifest/addon drift; missing manifest=${missingManifestFiles.join(',')} missing addon=${missingBuiltFiles.join(',')}`)
+}
 const require = createRequire(import.meta.url)
 for (const [name, expected] of Object.entries(addons)) {
   const file = path.join(nativeDir, `${name}.node`)
   if (!fs.existsSync(file)) throw new Error(`${name}: release addon missing: ${file}`)
   const addon = require(file)
   const exported = new Set(Object.keys(addon))
-  for (const value of Object.values(addon)) {
-    if (typeof value === 'function') for (const key of Object.getOwnPropertyNames(value.prototype ?? {})) exported.add(key)
+  for (const [name, value] of Object.entries(addon)) {
+    if (typeof value === 'function') {
+      for (const key of Object.getOwnPropertyNames(value.prototype ?? {})) {
+        if (key !== 'constructor') {
+          exported.add(key)
+          exported.add(`${name}.prototype.${key}`)
+        }
+      }
+      for (const key of Object.getOwnPropertyNames(value)) {
+        if (!['length', 'name', 'prototype', 'arguments', 'caller'].includes(key)) {
+          exported.add(`${name}.${key}`)
+        }
+      }
+    }
   }
   const missing = expected.filter((key) => !exported.has(key))
   if (missing.length) throw new Error(`${name}: missing runtime exports: ${missing.join(', ')}`)
-  console.log(`${name}: loaded ${expected.length} required runtime exports`)
+  const manifest = interfaceManifest[`${name}.node`]
+  if (!manifest) throw new Error(`${name}: complete interface manifest entry is missing`)
+  const manifestSet = new Set(manifest)
+  const actual = [...exported].sort()
+  const missingManifest = manifest.filter((key) => !exported.has(key))
+  const manifestActual = actual.filter((key) => key.includes('.') || Object.prototype.hasOwnProperty.call(addon, key))
+  const unexpected = manifestActual.filter((key) => !manifestSet.has(key))
+  if (missingManifest.length || unexpected.length) {
+    throw new Error(`${name}: interface drift; missing=${missingManifest.join(',')} unexpected=${unexpected.join(',')}`)
+  }
+  console.log(`${name}: verified ${manifest.length} complete runtime interfaces (${expected.length} production call-site requirements)`)
 }
 console.log('Native runtime API verification passed')

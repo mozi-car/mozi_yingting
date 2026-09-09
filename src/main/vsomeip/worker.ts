@@ -4,7 +4,11 @@ import { SomeipMessage, SomeipMessageType } from '../share/someip'
 import client from './client'
 
 let instance: client | null = null
-process.on('message', (message: any) => {
+const subscriptions = new Map<string, string>()
+const subscriptionKey = (service: number, instanceId: number, eventgroup: number, event?: number) =>
+  `${service}:${instanceId}:${eventgroup}:${event ?? '*'}`
+
+process.on('message', async (message: any) => {
   const id = message.id
   const method = message.method
   const data = message.data
@@ -67,8 +71,8 @@ process.on('message', (message: any) => {
     case 'notifyEvent': {
       const pl = data.payload
       const buf = Buffer.isBuffer(pl) ? pl : Buffer.from((pl as any)?.data ?? pl ?? [])
-      // SWIG: 4 args (…, buf) or 5 args (…, buf, force); char*+length come from one Buffer via vsomeip.i typemap
-      instance?.sendc.notify_event(
+      // Rust N-API receives the payload as one Buffer and preserves the force flag.
+      instance?.sendc.notifyEvent(
         Number(data.service),
         Number(data.instance),
         Number(data.event),
@@ -125,8 +129,7 @@ process.on('message', (message: any) => {
       break
     }
     case 'requestEvent': {
-      // SWIG N-API exposes C++ method names (snake_case), not camelCase
-      instance?.sendc.request_event_one_group(
+      instance?.sendc.requestEventOneGroup(
         Number(data.service),
         Number(data.instance),
         Number(data.event),
@@ -136,7 +139,7 @@ process.on('message', (message: any) => {
       break
     }
     case 'releaseEvent': {
-      instance?.sendc.release_event_simple(
+      instance?.sendc.releaseEventSimple(
         Number(data.service),
         Number(data.instance),
         Number(data.event)
@@ -152,8 +155,7 @@ process.on('message', (message: any) => {
       if (eventgroups.length === 0) {
         throw new Error('offerEvent requires eventgroup or eventgroups')
       }
-      // SWIG expects std::set<eventgroup_t>*; use Send helper (same pattern as request_event_one_group)
-      instance?.sendc.offer_event_with_groups(
+      instance?.sendc.offerEventWithGroups(
         Number(data.service),
         Number(data.instance),
         Number(data.event),
@@ -163,7 +165,7 @@ process.on('message', (message: any) => {
       break
     }
     case 'stopOfferEvent': {
-      instance?.app.stop_offer_event(
+      instance?.app.stopOfferEvent(
         Number(data.service),
         Number(data.instance),
         Number(data.event)
@@ -171,23 +173,24 @@ process.on('message', (message: any) => {
       break
     }
     case 'subscribe': {
-      instance?.app.subscribe(
-        Number(data.service),
-        Number(data.instance),
-        Number(data.eventgroup),
-        Number(data.major ?? 0),
-        Number(data.event)
-      )
+      const service = Number(data.service)
+      const instanceId = Number(data.instance)
+      const eventgroup = Number(data.eventgroup)
+      const event = data.event === undefined ? undefined : Number(data.event)
+      const id = instance?.app.subscribe(service, instanceId, eventgroup, Number(data.major ?? 0), event)
+      if (id) subscriptions.set(subscriptionKey(service, instanceId, eventgroup, event), id)
+      response.data = id
       break
     }
     case 'unsubscribe': {
       const s = Number(data.service)
       const i = Number(data.instance)
       const eg = Number(data.eventgroup)
-      if (data.event !== undefined && data.event !== null && data.event !== '') {
-        instance?.app.unsubscribe(s, i, eg, Number(data.event))
-      } else {
-        instance?.app.unsubscribe(s, i, eg)
+      const event = data.event !== undefined && data.event !== null && data.event !== '' ? Number(data.event) : undefined
+      const id = data.id || subscriptions.get(subscriptionKey(s, i, eg, event))
+      if (id) {
+        instance?.app.unsubscribe(String(id))
+        subscriptions.delete(subscriptionKey(s, i, eg, event))
       }
       break
     }
