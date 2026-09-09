@@ -1,3 +1,7 @@
 # Vendor SecureAccess SDK/example sources are retained as reference material,
 # but are not part of the Rust driver implementation or project language stats.
 resources/examples/secure_access_dll/SeedKey/** linguist-vendored linguist-detectable=false
+# Bundled vendor examples, DLLs, generated resources and import libraries are
+# distribution assets, not project implementation languages.
+resources/examples/** linguist-vendored linguist-detectable=false
+resources/lib/** linguist-vendored linguist-detectable=false
