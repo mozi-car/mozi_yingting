@@ -1,0 +1,3 @@
+# Vendor SecureAccess SDK/example sources are retained as reference material,
+# but are not part of the Rust driver implementation or project language stats.
+resources/examples/secure_access_dll/SeedKey/** linguist-vendored
