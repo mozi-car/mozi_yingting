@@ -103,6 +103,7 @@ pub fn run() {
             Ok(())
         })
         .manage(PendingOpen(Mutex::new(None)))
+        .manage(core::runtime::CoreRuntime::default())
         .plugin(local_resource_plugin())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(f) = first_mytproject_arg(&argv) {

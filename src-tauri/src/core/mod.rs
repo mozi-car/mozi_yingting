@@ -5,6 +5,11 @@
 
 pub mod can;
 pub mod config;
+pub mod error;
+pub mod event_bus;
+pub mod logging;
+pub mod runtime;
+pub mod task;
 pub mod device;
 pub mod discovery;
 pub mod doip;
