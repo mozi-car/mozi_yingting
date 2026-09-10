@@ -68,21 +68,30 @@ Vue / plugin UI
 | `replay/*` | ASC/BLF binary/text parsing, frame/shared CAN types, logging | `ipc/uds.ts`, NodeItem, replay UI | `core::replay` |
 | `worker/canopen/*` | JS protocol/EDS types, Node worker APIs | plugin SDK and user scripts | compatibility first; later `core::canopen` |
 
-## Stage dependency and validation matrix
+## Strict Phase 1–18 dependency and validation matrix
 
-| Stage | Rust boundary | Node fallback | Required validation |
-|---|---|---|---|
-| 01 Inventory | none | unchanged | docs cover paths, callers, events, threads, APIs |
-| 02 Core contracts | Error/Config/EventBus/Task types | all behavior remains Node | Rust unit tests; no release path change |
-| 03 DeviceManager | PnP + typed device registry | Node discovery comparison | add/remove/list/open/close/state event comparison |
-| 04 Transport | CAN/LIN/Serial/DoIP trait | existing adapters | open/send/receive/subscribe/close/error/timeout dual-run |
-| 05 CAN/LIN | existing Rust native drivers | Node vendor adapters | identical frame/status/timestamp/callback sequences |
-| 06 ISO-TP/UDS | Core session/state machine | `docan/cantp`, `dolin/lintp`, `worker/uds` | request/response, P2/P2*, security, transfer and cancellation |
-| 07 XCP | Core DAQ/ring buffer | plugin/Node XCP if present | command parity, DAQ ordering/drop/backpressure |
-| 08 SOME/IP | Core service/message lifecycle | `vsomeip/index.ts` + worker | offer/request/notify/subscribe/stop/error parity |
-| 09 Plugin compat | typed bridge + worker adapter | existing JS plugins | create/exec/event/stop/close and existing plugin suite |
-| 10 Rust default | Tauri commands/events | feature-gated fallback | release smoke, rollback switch, sidecar disabled in test mode |
-| 11 Remove sidecar | no Node product runtime | none | package has no sidecar runtime dependency; Tauri-only E2E |
+| Phase | Rust boundary/dependency | Node fallback | Required validation |
+|---:|---|---|---|
+| 1 | architecture inventory only | unchanged | docs cover paths, callers, APIs, events, threads, polling and risks |
+| 2 | Core module skeleton only | all behavior remains Node | compiles; no runtime path or behavior change |
+| 3 | Error, Logging, Config, EventBus, Task Runtime | Node services remain default | unit tests, cancellation/join tests, event serialization tests |
+| 4 | DeviceManager | NodeItem/device classes | list/open/close/state ownership tests |
+| 5 | DeviceManager + Discovery adapter | Node/PnP/vendor discovery | add/remove/list parity and event ordering |
+| 6 | Transport trait: open/send/receive/close/subscribe | existing CAN/LIN/Serial/DoIP adapters | typed transport contract and error/timeout tests |
+| 7 | CAN/CAN-FD Core transport → existing Rust Native drivers | Node CAN adapters | discover/open/config/send/receive/status/timestamp dual-run |
+| 8 | LIN Core transport/scheduler → existing Rust Native drivers | Node LIN adapters | schedule/request/wakeup/read/write/callback parity |
+| 9 | Serial Core transport → existing Rust serial Native | `serial/index.ts` compatibility | open/write/read/list/close/error parity |
+| 10 | shared ISO-TP session/frame/timer Core | `docan/cantp`, `dolin/lintp` | CAN/LIN/DoIP frame/session/timeout tests |
+| 11 | UDS Core over Transport/ISO-TP/DoIP | `docan/uds`, `worker/uds` | request/response/security/P2/P2*/transfer/DTC parity |
+| 12 | XCP Core and DAQ ring buffer | existing Node/plugin path | command parity, DAQ ordering/drop/backpressure |
+| 13 | SOME/IP Core service/message lifecycle | `vsomeip/index.ts` + worker | offer/request/notify/subscribe/stop/error parity |
+| 14 | Plugin Compatibility adapter | existing JS plugin workers | create/exec/event/stop/close and plugin suite |
+| 15 | Rust/Node dual-run comparison harness | Node remains fallback | identical scripted result/event/error traces |
+| 16 | Tauri commands/events call Rust Core by default | feature-gated Node fallback | release smoke, rollback switch, sidecar fallback test |
+| 17 | remove Node product runtime/Sidecar | none in product release | no Node child, no `build:sidecar`, Tauri-only E2E |
+| 18 | clean packaging/build dependencies | Node only dev tooling | package/resource audit and final installer build |
+
+Dependencies flow downward: UI/commands → Core services → transport/protocol → driver/FFI. Core must not depend on Node module paths or vendor-specific TypeScript classes.
 
 ## Target dependency graph
 
@@ -101,5 +110,3 @@ core::runtime
   ├── core::replay
   └── core::plugin::compat
 ```
-
-Dependencies flow downward: UI/commands → Core services → transport/protocol → driver/FFI. Core must not depend on Node module paths or vendor-specific TypeScript classes.

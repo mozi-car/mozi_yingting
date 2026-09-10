@@ -1,6 +1,6 @@
 # Rust Core Migration Status
 
-## Phase 01 — architecture inventory
+## Phase 01 — Node Runtime architecture inventory
 
 Status: **complete**
 
@@ -12,6 +12,7 @@ src-tauri/src/
 native/
 src/
 scripts/
+package.json
 ```
 
 Generated documents:
@@ -24,55 +25,64 @@ Generated documents:
 - `threading-map.md`
 - `plugin-compatibility.md`
 - `migration-status.md`
+- `architecture-issues.md`
 
-The inventory identifies actual source paths, Native/Rust APIs, RPC channels, event names, workers, processes, high-frequency paths, synchronous/asynchronous boundaries, Vue/Plugin callers and Node-to-Rust destinations. Existing Node behavior and existing Rust Native drivers were not changed during Phase 01.
-
-## Phase 02 status
-
-**Not started.** No `src-tauri/src/core/` implementation is part of this architecture-inventory phase. The following phases are a plan only.
+The inventory records actual source paths, Native/Rust APIs, RPC channels, Vue/Plugin callers, event names, workers, processes, polling/timers, high-frequency paths and synchronous/asynchronous boundaries. Existing Node behavior and existing Rust Native drivers were not changed during Phase 01.
 
 ## Current facts
 
 - Product runtime still starts `out/sidecar/index.cjs`.
 - `src-tauri/src/bridge.rs` owns the Node child process and JSON-lines bridge.
-- `src-tauri/src/hardware.rs` is event-driven PnP discovery only, not a Core device manager.
+- `src-tauri/src/hardware.rs` is event-driven PnP discovery only, not a Core DeviceManager.
 - `src/main/nodeItem.ts` is the highest-fan-in business orchestrator.
 - `src/main/rpc.ts` is the largest compatibility boundary.
 - `src/main/workerClient.ts` is the main script/test worker boundary.
 - `src/main/pluginCilent.ts` is the plugin compatibility boundary.
-- Native Rust N-API crates are driver boundaries, not yet a unified Rust Core.
+- Native Rust N-API crates are completed driver boundaries, not yet a unified Rust Core.
 
-## Planned implementation order
+## Strict 18-phase plan
 
-| Phase | Deliverable | Code change? | Exit criteria |
-|---|---|---:|---|
-| 02 | Rust Core skeleton and typed Error/Logger/Config | yes | compiles; no runtime behavior change |
-| 03 | EventBus and TaskRuntime | yes | cancellation, join and event tests |
-| 04 | DeviceManager and discovery adapter | yes | PnP/vendor scan parity and typed events |
-| 05 | Transport traits and CAN adapter | yes | Rust/Node dual-run comparison |
-| 06 | LIN and Serial adapters | yes | API/error/lifecycle parity |
-| 07 | DoIP transport | yes | socket/error/timeout parity |
-| 08 | ISO-TP | yes | frame/session/timer tests |
-| 09 | UDS | yes | request/response/security/timeout tests |
-| 10 | XCP | yes | DAQ ring-buffer and command tests |
-| 11 | SOME/IP | yes | service discovery/request/event lifecycle tests |
-| 12 | Plugin compatibility layer | yes | existing plugin suite passes |
-| 13 | Rust default / Node fallback | yes | feature-gated dual-run and rollback |
-| 14 | Remove Node product runtime | yes | no `build:sidecar`, no Node child in release |
+| Phase | Scope | Current status | Exit criteria |
+|---:|---|---|---|
+| 1 | Analyze Node Runtime architecture | **complete** | 8 migration maps, risk/issues list and A–H report committed |
+| 2 | Establish Rust Core architecture skeleton only | **not started** | module boundaries compile; no business behavior changed |
+| 3 | Migrate Error / Logging / Config / EventBus / Task Runtime | not started | infrastructure contracts and unit tests pass |
+| 4 | DeviceManager | not started | typed device list/open/close/state contract and dual-run tests |
+| 5 | Device Discovery | not started | PnP/vendor discovery merged into DeviceManager events |
+| 6 | Transport abstraction | not started | `open/send/receive/close/subscribe` contract tested |
+| 7 | CAN / CAN-FD | not started | Rust Core transport with Node fallback and frame parity |
+| 8 | LIN | not started | Rust Core LIN transport/scheduler parity |
+| 9 | Serial | not started | Rust Core serial transport and plugin compatibility |
+| 10 | ISO-TP | not started | CAN/LIN/DoIP shared session/frame/timer tests |
+| 11 | UDS | not started | request/response/security/timeout/transfer parity |
+| 12 | XCP | not started | command and DAQ ring-buffer tests |
+| 13 | SOME/IP | not started | service discovery/request/event lifecycle parity |
+| 14 | Plugin Compatibility | not started | existing JavaScript plugin API remains functional through adapter |
+| 15 | Node/Rust dual-run tests | not started | identical scripted results/events/errors and rollback path |
+| 16 | Rust Core becomes default | not started | feature-gated Node fallback, Rust default release smoke |
+| 17 | Delete Node Runtime / Sidecar | not started | no Node child or sidecar product dependency |
+| 18 | Clean build system | not started | remove runtime sidecar build/copy paths; keep Node only for tooling |
 
-## Validation policy for future phases
+### Ordering constraints
 
-Every phase must provide:
+- Phase 2 is only an architecture skeleton. It must not implement Phase 3 infrastructure or Phase 4 DeviceManager.
+- Phase 3 must finish Error, Logging, Config, EventBus and Task Runtime before DeviceManager work begins.
+- Phase 4 DeviceManager is separate from Phase 5 Device Discovery.
+- Phase 6 Transport precedes CAN, LIN and Serial.
+- ISO-TP precedes UDS; UDS/Transport behavior must remain 1:1.
+- Node fallback remains until Phase 15 dual-run validation passes.
+- Phase 17/18 cannot begin before Phase 16 Rust-default validation.
+
+## Validation policy
+
+Every implementation phase must provide:
 
 1. unit tests for the new Core contract;
-2. integration tests against the existing Node behavior where both paths exist;
+2. integration tests against existing Node behavior where both paths exist;
 3. explicit event/thread/cancellation tests;
-4. a rollback/fallback path until the Rust path is default;
-5. no Vue/plugin API break unless separately approved.
-
-## First implementation task after this inventory
-
-Only after this architecture inventory is reviewed and approved should the next task implement the Rust Core skeleton and `DeviceManager` interfaces in `src-tauri/src/core/`. That future task must not change existing Node behavior. The first adapter should mirror the current Tauri PnP events and expose a typed command/event surface; device driver integration should follow after the Core contracts are tested.
+4. a rollback/fallback path until Rust becomes default;
+5. no Vue/plugin API break unless separately approved;
+6. a documented command, result and residual-risk report.
 
 ## Phase 01 final report A–H
 
@@ -82,38 +92,38 @@ Vue/TypeScript and plugin UI call Tauri IPC; `bridge.rs` launches `out/sidecar/i
 
 ### B. Target Rust Core architecture
 
-Vue/Plugin UI → typed Tauri commands/events → Rust Core services → Drivers/FFI → vendor DLL/SDK. Node remains only as build tooling and a Plugin Compatibility fallback until later phases.
+Vue/Plugin UI → typed Tauri commands/events → Rust Core services → Drivers/FFI → vendor DLL/SDK. Node remains only as build tooling and a Plugin Compatibility fallback until Phase 17.
 
 ### C. Node → Rust mapping
 
-| Node responsibility | Rust destination |
-|---|---|
-| `rpc.ts` / `ipc/*` | typed `commands` and event adapters |
-| `nodeItem.ts` | `DeviceManager`, `Transport`, protocol services |
-| `docan/*` / `dolin/*` / `serial/*` / `doip/*` | `Transport` implementations |
-| `cantp.ts` / `lintp.ts` | shared `IsoTp` |
-| `uds.ts` / worker UDS | `Uds` service |
-| `vsomeip/*` | `SomeIp` service |
-| `replay/*` / `ostrace/*` | `Replay` / `Trace` services |
-| `workerClient.ts` / plugin SDK | `TaskRuntime` and `PluginCompat` |
-| `share/*` | versioned Core/UI wire schemas |
+| Node responsibility | Rust destination | Planned phase |
+|---|---|---:|
+| `rpc.ts` / `ipc/*` | typed `commands` and event adapters | 3, 15–17 |
+| `nodeItem.ts` | DeviceManager, Transport and protocol services | 4–11 |
+| `docan/*` / `dolin/*` / `serial/*` / `doip/*` | Transport implementations | 6–9 |
+| `cantp.ts` / `lintp.ts` | shared ISO-TP | 10 |
+| `uds.ts` / worker UDS | UDS service | 11 |
+| `vsomeip/*` | SOME/IP service | 13 |
+| `replay/*` / `ostrace/*` | Replay/Trace services | 6–15 |
+| `workerClient.ts` / plugin SDK | Task Runtime and PluginCompat | 3, 14–15 |
+| `share/*` | versioned Core/UI wire schemas | 3–6 |
 
 ### D. Recommended migration order
 
-Error → Logging → Config → EventBus → Task/Worker → DeviceManager → Discovery → Transport → CAN → LIN → Serial → ISO-TP → UDS → XCP → SOME/IP → PluginCompat → dual-run → Rust default → remove Node.
+Exactly the 18 phases listed above: inventory → skeleton → infrastructure → DeviceManager → Discovery → Transport → CAN → LIN → Serial → ISO-TP → UDS → XCP → SOME/IP → Plugin Compatibility → dual-run → Rust default → remove Node → clean build.
 
 ### E. Module dependencies
 
-The detailed dependency graph is in `dependency-map.md`; Native crate boundaries are listed against each Node adapter, and `ipc/*` dependencies are separated into hardware/domain, host/tooling and plugin groups.
+`dependency-map.md` contains the current process graph, `src-tauri/src` responsibilities, all Native crate boundaries, remaining application module dependencies and the stage dependency/validation matrix.
 
 ### F. Risk levels
 
-The risk matrix is in `node-runtime-map.md`: `rpc/index`, `nodeItem`, `workerClient`, `ipc/uds` are P0; CAN/LIN/Serial/DoIP/SOME-IP are P1; replay/trace/tooling/share are P2.
+`node-runtime-map.md` contains the risk matrix: RPC/index, NodeItem, WorkerClient and `ipc/uds` are P0; domain transports/protocols are P1; replay/trace/tooling/share are P2.
 
 ### G. Node fallback that must remain
 
-Keep Node fallback for generic RPC, `nodeItem`, worker/plugin SDK, UDS script API, CAN/LIN/Serial compatibility wrappers, SOME/IP worker, replay/trace and Python/package tooling until their Rust replacement has dual-run coverage.
+Keep Node fallback for generic RPC, NodeItem, worker/plugin SDK, UDS script API, CAN/LIN/Serial compatibility wrappers, SOME/IP worker, replay/trace, Python parser tooling and package tooling until Phase 15 passes.
 
-### H. Phase 02 scope
+### H. Phase 2 scope
 
-Phase 02 is not started. After approval, it may create only the Rust Core contracts/skeleton and tests; it must not yet migrate business modules, delete Node, modify Native, change Vue, or alter plugin behavior.
+Phase 2 is **not started**. When approved, it may only create the Rust Core module boundaries under `src-tauri/src/core`, `drivers`, `commands` and `events`, with compile-only tests. It must not implement Phase 3 infrastructure, DeviceManager, transports, protocols, delete Node, modify Native, change Vue or alter plugin behavior.
