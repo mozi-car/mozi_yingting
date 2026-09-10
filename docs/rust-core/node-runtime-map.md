@@ -91,6 +91,46 @@ Native API examples are enumerated in `scripts/native-interface-manifest.json` a
 - `index.ts`: replay source orchestration and frame delivery.
 - Target: `core::replay`, with output converted into the same `Frame`/EventBus path as live traffic.
 
+### `src/main/ipc/`
+
+`ipc/index.ts` imports the registration modules by side effect. The actual channel groups are:
+
+| File | Channel families / callers | Boundary |
+|---|---|---|
+| `ipc/uds.ts` | project/build/test, CAN/LIN/ETH/Serial/SOME-IP send, periodic/schedule/replay, device discovery, PWM | `nodeItem`, `docan`, `dolin`, `doip`, `serial`, `vsomeip`, renderer stores |
+| `ipc/plugin.ts` | plugin create/close/exec/path/list/install/remote plugin | `pluginCilent`, `NodeClass`, renderer plugin store/SDK |
+| `ipc/fs.ts` | path/glob/read/write/readdir/mkdir/exist/stat/rmdir/open | renderer project/plugin stores |
+| `ipc/dialog.ts` | open/save/message/error dialogs | renderer/plugin SDK; native dialog interception in Tauri bridge |
+| `ipc/serialPort.ts` | serial port list/device list | `serial/rust.ts`, renderer hardware store |
+| `ipc/canmartix.ts` | parse/export CAN matrix | `canmartix.ts`, project store |
+| `ipc/cdd.ts`, `ipc/odx.ts` | CDD/ODX parse and tester info | `python.ts`, renderer project/UDS stores |
+| `ipc/casdoor.ts` | login/token/user/authenticated requests | store, renderer user store |
+| `ipc/var.ts` | variable/signal set | `nodeItem`, worker event layer, renderer data store |
+| `ipc/pnpm.ts` | project package install/uninstall/read/init | bundled `resources/lib/myt` |
+| `ipc/i18n.ts`, `ipc/update.ts`, `ipc/axios.ts`, `ipc/examples.ts`, `ipc/key.ts`, `ipc/ostrace.ts` | language, update, network, examples, key and trace utilities | renderer stores/views |
+
+These are mostly application services rather than transport drivers. They should migrate after Core contracts exist; filesystem, auth, update and package operations may remain host/plugin services.
+
+### `src/main/pwm/`
+
+`pwm/base.ts`, `pwm/ecubus/index.ts` and `pwm/index.ts` model PWM device configuration and duty operations. Callers include `nodeItem.ts`, `ipc/uds.ts`, `worker/uds.ts`, replay/CLI paths and renderer UDS hardware/network views. Target: `core::device::pwm` or a transport capability, with `ipc-pwm-set-duty` retained through a typed compatibility command.
+
+### `src/main/share/`
+
+`share/can.ts`, `lin.ts`, `doip.ts`, `serial.ts`, `uds.ts`, `tester.ts`, `sysVar.ts`, `osEvent.ts` and `share/someip/*` are cross-layer data contracts, constants, address/bit/DLC/checksum helpers, configuration types and error maps. They are imported by nearly every device/protocol module and many renderer/CLI paths. They should become versioned Rust/TypeScript wire schemas first; they are not independent runtime workers.
+
+### `src/main/canmartix.ts`
+
+Owns CAN matrix parsing/encoding detection, mis-encoded text repair and export. It is called by `ipc/canmartix.ts` and `renderer/src/stores/project.ts`, and imports `python.ts` for parser execution. Target: a Core parser service only if parsing is performance-sensitive; otherwise keep as project tooling.
+
+### `src/main/ostrace/`
+
+`item.ts`, `parser.ts` and `worker.ts` parse OS trace binary/CSV streams, validate CRC/timestamps, emit trace data and report end/error. Callers are `ipc/ostrace.ts`, `ipc/uds.ts`, renderer UDS/ostrace views. Target: Rust trace parser/worker for large files; UI should receive progress and batches, not every raw byte.
+
+### `src/main/python.ts`
+
+Resolves the bundled Python executable and script directory. `ipc/cdd.ts`, `ipc/odx.ts` and `canmartix.ts` use it to run parser tooling. Target: host/tooling service, not Core transport; retain until parsers are replaced or embedded.
+
 ## High-frequency paths
 
 ```text

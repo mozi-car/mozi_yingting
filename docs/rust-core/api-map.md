@@ -98,6 +98,25 @@ These names are current compatibility channels, not the final Rust Core API. Eac
 
 The complete case-sensitive export contract is in `scripts/native-interface-manifest.json`; `scripts/check-native-api.mjs` compares it against actual loaded addons.
 
+## Detailed IPC registry by source
+
+The following registrations are in `src/main/ipc/` and their renderer/plugin callers were extracted from imports and `ipcRenderer.invoke/send` sites:
+
+- `ipc/uds.ts`: `ipc-service-detail`, `ipc-open-script-api`, `ipc-get-build-status`, `ipc-create-project`, `ipc-build-project`, `ipc-get-test-info`, `ipc-run-test`, `ipc-get-test-report`, `ipc-stop-test`, `ipc-get-test`, `ipc-delete-node`, `ipc-delete-tester`, `ipc-get-can-devices`, `ipc-get-eth-devices`, `ipc-get-lin-devices`, `ipc-get-pwm-devices`, `ipc-global-start`, `ipc-global-stop`, `ipc-start-schedule`, `ipc-stop-schedule`, `ipc-get-schedule`, `ipc-run-sequence`, `ipc-stop-sequence`, `ipc-replay-start/stop/pause/resume/get-state`, `ipc-send-can`, `ipc-send-lin`, `ipc-send-eth`, `ipc-send-serial`, `ipc-send-someip-period`, `ipc-start/stop/update-*period`, `ipc-update-can-signal`, `ipc-update-lin-signals`, `ipc-switch-tester-present`.
+- `ipc/plugin.ts`: `ipc-plugin-lib-path`, `ipc-get-plugins-dir`, `ipc-open-plugin-path`, `ipc-list-plugin-dirs`, `ipc-plugin-create`, `ipc-plugin-close`, `ipc-plugin-exec`, `ipc-get-remote-plugins`, `ipc-install-remote-plugin`, `ipc-install-plugin-from-zip`; callers are renderer plugin store/SDK and `PluginClient`.
+- `ipc/fs.ts`: `ipc-path-parse`, `ipc-path-relative`, `ipc-glob`, `ipc-open-path`, `ipc-fs-readFile/writeFile/readdir/mkdir/exist/stat/rmdir`; callers are project/plugin stores and preload.
+- `ipc/serialPort.ts`: `ipc-get-serial-port-list`, `ipc-get-serial-devices`; caller is renderer hardware/serial UI.
+- `ipc/canmartix.ts`: `ipc-canmartix-parse`, `ipc-canmartix-exportOtherFile`; caller is project store; implementation is `canmartix.ts` plus optional Python parser.
+- `ipc/cdd.ts`/`ipc/odx.ts`: `ipcCddParse`, `ipcCddParseTesterInfo`, `ipcOdxParse`, `ipcOdxParseTesterInfo`; parser subprocess boundary is `python.ts`.
+- `ipc/dialog.ts`: `ipc-show-open-dialog`, `ipc-show-save-dialog`, `ipc-show-message-box`, `icp-show-error-box`; Tauri already intercepts the open/save dialog subset.
+- `ipc/casdoor.ts`: `ipc-auto-login`, `ipc-get-user-info`, `refreshToken`, `ipc-logout`, `ipc-get-casdoor-config`, `ipc-authenticated-request`.
+- `ipc/i18n.ts`: `get-all-translations`, `get-supported-languages`, `set-language`.
+- `ipc/pnpm.ts`: `ipc-pnpm-init`, `ipc-pnpm-install`, `ipc-pnpm-uninstall`, `ipc-pnpm-read`; uses bundled `resources/lib/myt`.
+- `ipc/var.ts`: `ipc-var-set`, `ipc-signal-set`.
+- `ipc/examples.ts`, `ipc/axios.ts`, `ipc/key.ts`, `ipc/update.ts`: example/open-link, HTTP, key and update channels.
+
+For each channel, the migration unit is: preserve name/payload → add typed Core command → run Node/Rust dual comparison → switch renderer caller → remove sidecar handler.
+
 ## Proposed typed Rust Core API
 
 ```rust

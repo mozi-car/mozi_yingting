@@ -45,6 +45,38 @@
 - Replay events: frame output, progress, end, error, flush.
 - CANopen worker events: `emergency`, `heartbeat`, `changeState`, `changeMode`, `changeDeviceId` and protocol-specific messages.
 
+## IPC event producers and consumers
+
+| Producer | Event/channel | Consumer | Payload / boundary |
+|---|---|---|---|
+| `ipc/uds.ts` | `ipc-send-can`, `ipc-update-can-period`, `ipc-send-someip-period`, `ipc-update-lin-signals` and related channels | renderer stores/views → Node domain objects | command request; response is RPC result |
+| `ipc/var.ts` | `ipc-var-set`, `ipc-signal-set` | renderer data store → Node variable layer | variable/signal name and scalar/array value |
+| `ipc/plugin.ts` | `ipc-plugin-exec`, `ipc-plugin-create/close` | renderer plugin SDK → `PluginClient` | method, params, plugin ID |
+| `ipc/serialPort.ts` | `ipc-get-serial-devices`, `ipc-get-serial-port-list` | renderer hardware/serial UI | device list |
+| `ipc/casdoor.ts` | `refreshToken`, `ipc-auto-login`, `ipc-authenticated-request` | renderer user store | auth/user request/response |
+| `ipc/ostrace.ts` + `ostrace/worker.ts` | trace data/progress/error/end | UDS/ostrace renderer views | trace records and progress |
+| `canmartix.ts` + `ipc/canmartix.ts` | parse/export response | project store | matrix JSON/file result |
+| `python.ts` via CDD/ODX IPC | parser process result/error | project/UDS stores | parsed JSON/tester info |
+
+## Protocol-internal event traceability
+
+| Event | Producer path | Consumer path | Payload |
+|---|---|---|---|
+| `can-frame` | `docan/base.ts` adapter after driver read/callback | `log.ts`, `nodeItem.ts`, CAN-TP and worker listeners | `CanMessage` + timestamp |
+| `lin-frame` | `dolin/base.ts` adapter/scheduler | LIN-TP, `nodeItem.ts`, worker listeners | `LinMsg` |
+| `__canMsg` | `worker/uds.ts` worker event bridge | plugin/test `Util.OnCan*` | script-facing CAN object |
+| `__linMsg` | `worker/uds.ts` | plugin/test `Util.OnLin*` | script-facing LIN object |
+| `__serialMsg` | `worker/uds.ts` / `serial/index.ts` | `Util.OnSerial` | byte array/Buffer |
+| `__someipMsg` | `worker/uds.ts` / `vsomeip/client.ts` | SOME/IP plugin listeners | `SomeipMessage` |
+| `__someipServiceValid` | `vsomeip/client.ts` availability callback | request waiters and plugin listeners | service/instance availability |
+| `__varUpdate` | Node variable/event layer | `Util.OnVar*`, renderer variable store | variable name/value |
+| `__varFc` | worker flow-control layer | diagnostic script | flow-control state |
+| `pluginEvent` | plugin worker SDK `emitEvent` | `PluginClient.eventHandler`, renderer plugin bus | `{name, data}` |
+| `hardware-added` | `hardware.rs::process_event` | renderer hardware store | `HardwareDevice` |
+| `hardware-removed` | `hardware.rs::process_event` | renderer hardware store | `{id}` |
+
+Frequency classes: frame events are per message/read chunk; worker/plugin events are script-defined; state/error/close events are low frequency. The Core adapter must batch frame events and preserve correlation IDs for diagnostic responses.
+
 ## Target Rust EventBus
 
 Current string events should be normalized into typed variants:
