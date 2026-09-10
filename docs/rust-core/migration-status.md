@@ -17,31 +17,6 @@ Generated documents:
 
 No runtime source code was changed in this phase. Existing Rust native crates and vendor DLL paths were not rewritten.
 
-## Phase 02 — Rust Core skeleton
-
-Status: **skeleton complete; business migration not started**
-
-Implemented under `src-tauri/src/core/`:
-
-- `error.rs`: typed `CoreError`/`CoreResult`;
-- `config.rs`: typed project/config state;
-- `event_bus.rs`: typed subscription and event fanout;
-- `task.rs`: cancellation/task supervisor handles;
-- `device.rs`: typed `DeviceManager`, device states and events;
-- `transport.rs`: CAN/LIN/Serial/DoIP transport contract;
-- `mod.rs`: shared `Core` state managed by the Tauri host.
-
-The existing Node sidecar remains the default runtime. No existing business behavior was replaced in this phase.
-
-Verification:
-
-```text
-cargo test --manifest-path src-tauri/Cargo.toml --lib
-2 passed; 0 failed
-```
-
-`cargo fmt --check` could not run because `rustfmt` is not installed in the configured Windows Rust toolchain.
-
 ## Current facts
 
 - Product runtime still starts `out/sidecar/index.cjs`.
