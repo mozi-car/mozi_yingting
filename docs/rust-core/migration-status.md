@@ -45,7 +45,7 @@ The inventory records actual source paths, Native/Rust APIs, RPC channels, Vue/P
 | Phase | Scope | Current status | Exit criteria |
 |---:|---|---|---|
 | 1 | Analyze Node Runtime architecture | **complete** | 8 migration maps, risk/issues list and A–H report committed |
-| 2 | Establish Rust Core architecture skeleton only | **not started** | module boundaries compile; no business behavior changed |
+| 2 | Establish Rust Core architecture skeleton only | **in progress** | module boundaries compile; no business behavior changed |
 | 3 | Migrate Error / Logging / Config / EventBus / Task Runtime | not started | infrastructure contracts and unit tests pass |
 | 4 | DeviceManager | not started | typed device list/open/close/state contract and dual-run tests |
 | 5 | Device Discovery | not started | PnP/vendor discovery merged into DeviceManager events |
@@ -126,4 +126,4 @@ Keep Node fallback for generic RPC, NodeItem, worker/plugin SDK, UDS script API,
 
 ### H. Phase 2 scope
 
-Phase 2 is **not started**. When approved, it may only create the Rust Core module boundaries under `src-tauri/src/core`, `drivers`, `commands` and `events`, with compile-only tests. It must not implement Phase 3 infrastructure, DeviceManager, transports, protocols, delete Node, modify Native, change Vue or alter plugin behavior.
+Phase 2 is the current phase and is limited to creating the Rust Core module boundaries under `src-tauri/src/core`, `drivers`, `commands` and `events`, with compile-only tests. It must not implement Phase 3 infrastructure, DeviceManager, transports, protocols, delete Node, modify Native, change Vue or alter plugin behavior.
