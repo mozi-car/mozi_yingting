@@ -17,6 +17,10 @@ Generated documents:
 
 No runtime source code was changed in this phase. Existing Rust native crates and vendor DLL paths were not rewritten.
 
+## Phase 02 status
+
+**Not started.** The Phase 02 row in the plan below is a future task list only. No `src-tauri/src/core/` implementation is part of this architecture-inventory phase.
+
 ## Current facts
 
 - Product runtime still starts `out/sidecar/index.cjs`.
@@ -46,6 +50,6 @@ No runtime source code was changed in this phase. Existing Rust native crates an
 | 13 | Rust default / Node fallback | yes | feature-gated dual-run and rollback |
 | 14 | Remove Node product runtime | yes | no `build:sidecar`, no Node child in release |
 
-## First implementation task
+## First implementation task after this inventory
 
-The next code task should implement only the Rust Core skeleton and `DeviceManager` interfaces in `src-tauri/src/core/`, without changing existing Node behavior. The first adapter should mirror the current Tauri PnP events and expose a typed command/event surface. Device driver integration should follow after the Core contracts are tested.
+Only after this architecture inventory is reviewed and approved should the next task implement the Rust Core skeleton and `DeviceManager` interfaces in `src-tauri/src/core/`. That future task must not change existing Node behavior. The first adapter should mirror the current Tauri PnP events and expose a typed command/event surface; device driver integration should follow after the Core contracts are tested.
