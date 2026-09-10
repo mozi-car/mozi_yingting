@@ -21,6 +21,10 @@ impl CoreError {
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new("internal", message)
     }
+
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self::new("not_found", message)
+    }
 }
 
 impl Display for CoreError {

@@ -33,6 +33,10 @@ The inventory records actual source paths, Native/Rust APIs, RPC channels, Vue/P
 
 Phase 03 implements only the infrastructure primitives: `CoreError`, `CoreLogger`, `ConfigStore`, `EventBus`, `TaskRuntime` and `CoreRuntime`, registered as Tauri managed state. DeviceManager, Discovery, Transport, protocols, plugin migration and Node removal are not implemented in this phase.
 
+## Current Phase 04 implementation boundary
+
+The current change adds a typed Rust `DeviceManager` with register/remove/list/get, open/close state transitions, EventBus device events and CoreRuntime ownership. Discovery, vendor driver opening and Node replacement remain outside this phase.
+
 ## Current facts
 
 - Product runtime still starts `out/sidecar/index.cjs`.
@@ -51,7 +55,7 @@ Phase 03 implements only the infrastructure primitives: `CoreError`, `CoreLogger
 | 1 | Analyze Node Runtime architecture | **complete** | 8 migration maps, risk/issues list and A–H report committed |
 | 2 | Establish Rust Core architecture skeleton only | **complete** | module boundaries compile; no business behavior changed |
 | 3 | Migrate Error / Logging / Config / EventBus / Task Runtime | **complete** | infrastructure contracts and unit tests pass |
-| 4 | DeviceManager | **not started** | typed device list/open/close/state contract and dual-run tests |
+| 4 | DeviceManager | **in progress** | typed device list/open/close/state contract and dual-run tests |
 | 5 | Device Discovery | not started | PnP/vendor discovery merged into DeviceManager events |
 | 6 | Transport abstraction | not started | `open/send/receive/close/subscribe` contract tested |
 | 7 | CAN / CAN-FD | not started | Rust Core transport with Node fallback and frame parity |

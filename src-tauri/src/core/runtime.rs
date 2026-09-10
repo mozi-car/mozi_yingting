@@ -1,4 +1,5 @@
 use super::config::{ConfigStore, CoreConfig};
+use super::device::DeviceManager;
 use super::event_bus::EventBus;
 use super::logging::CoreLogger;
 use super::task::TaskRuntime;
@@ -9,15 +10,18 @@ pub struct CoreRuntime {
     pub events: EventBus,
     pub tasks: TaskRuntime,
     pub logger: CoreLogger,
+    pub devices: DeviceManager,
 }
 
 impl CoreRuntime {
     pub fn new(component: impl Into<String>) -> Self {
+        let events = EventBus::new();
         Self {
             config: ConfigStore::new(CoreConfig::default()),
-            events: EventBus::new(),
+            events: events.clone(),
             tasks: TaskRuntime::new(),
             logger: CoreLogger::new(component),
+            devices: DeviceManager::new(events),
         }
     }
 }
