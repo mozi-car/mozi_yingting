@@ -29,7 +29,7 @@ The inventory identifies actual source paths, Native/Rust APIs, RPC channels, ev
 
 ## Phase 02 status
 
-**Not started.** No `src-tauri/src/core/` implementation is part of this architecture-inventory phase. The following phases are a plan only.
+**In progress: architecture skeleton only.** `src-tauri/src/core/` now contains empty module boundaries and a compile-only `CoreSkeleton` marker. No business behavior, driver adapter, protocol implementation, Node replacement or behavior change has been introduced. Phase 03 infrastructure is not started. The following phases remain a plan only.
 
 ## Current facts
 
@@ -70,9 +70,9 @@ Every phase must provide:
 4. a rollback/fallback path until the Rust path is default;
 5. no Vue/plugin API break unless separately approved.
 
-## First implementation task after this inventory
+## Current Phase 02 implementation boundary
 
-Only after this architecture inventory is reviewed and approved should the next task implement the Rust Core skeleton and `DeviceManager` interfaces in `src-tauri/src/core/`. That future task must not change existing Node behavior. The first adapter should mirror the current Tauri PnP events and expose a typed command/event surface; device driver integration should follow after the Core contracts are tested.
+The current task only establishes module boundaries in `src-tauri/src/core/`, `src-tauri/src/drivers/`, `src-tauri/src/commands/` and `src-tauri/src/events/`. It does not implement Error/Logging/Config/EventBus/Task Runtime or DeviceManager. Those belong to Phase 03 and Phase 04 respectively. Existing Node behavior remains the product runtime and existing Native crates remain unchanged.
 
 ## Phase 01 final report A–H
 
