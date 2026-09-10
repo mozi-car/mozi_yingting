@@ -131,6 +131,22 @@ Owns CAN matrix parsing/encoding detection, mis-encoded text repair and export. 
 
 Resolves the bundled Python executable and script directory. `ipc/cdd.ts`, `ipc/odx.ts` and `canmartix.ts` use it to run parser tooling. Target: host/tooling service, not Core transport; retain until parsers are replaced or embedded.
 
+## Risk and fallback matrix
+
+| Node area | Risk | Why | Must retain Node fallback? |
+|---|---|---|---|
+| `index.ts` / `rpc.ts` | P0 | all renderer channels and sidecar startup depend on it | yes until every channel has a typed Tauri/Core path |
+| `nodeItem.ts` | P0 | highest fan-in; owns devices, diagnostics, scripts and lifecycle | yes during each domain migration |
+| `workerClient.ts` / `worker/*` | P0 | plugin/test API and user scripts depend on Worker RPC | yes until PluginCompat and script tests pass |
+| `ipc/uds.ts` | P0 | combines device lifecycle, UDS, schedules, replay, periodic sends | yes; migrate by channel groups |
+| `docan/*` / `dolin/*` | P1 | protocol/device orchestration above completed Native drivers | yes during CAN/LIN dual-run |
+| `serial/*` | P1 | Node-compatible wrapper above Rust serial addon | yes for plugin API compatibility |
+| `doip/*` | P1 | socket/TLS/routing activation and UDS transport | yes until DoIP transport parity |
+| `vsomeip/*` | P1 | child process and service/event compatibility | yes until Core SOME/IP lifecycle parity |
+| `replay/*` / `ostrace/*` | P2 | file parser, timing and progress behavior | yes until file/progress comparison passes |
+| `ipc/fs`, `ipc/dialog`, `ipc/casdoor`, `ipc/pnpm` | P2 | host/tooling integrations, not hardware Core | yes as host/plugin services unless separately replaced |
+| `share/*`, `canmartix`, `python` | P2 | schemas/helpers/parser tooling with broad fan-in | yes while wire schemas and parser behavior are stabilized |
+
 ## High-frequency paths
 
 ```text

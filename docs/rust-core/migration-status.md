@@ -73,3 +73,47 @@ Every phase must provide:
 ## First implementation task after this inventory
 
 Only after this architecture inventory is reviewed and approved should the next task implement the Rust Core skeleton and `DeviceManager` interfaces in `src-tauri/src/core/`. That future task must not change existing Node behavior. The first adapter should mirror the current Tauri PnP events and expose a typed command/event surface; device driver integration should follow after the Core contracts are tested.
+
+## Phase 01 final report A–H
+
+### A. Current real architecture
+
+Vue/TypeScript and plugin UI call Tauri IPC; `bridge.rs` launches `out/sidecar/index.cjs`; Node `rpc.ts` dispatches `ipc/*`; `nodeItem`/workers own domain orchestration; TypeScript adapters load completed Rust Native `.node` crates; those crates call vendor DLL/WinUSB/system APIs.
+
+### B. Target Rust Core architecture
+
+Vue/Plugin UI → typed Tauri commands/events → Rust Core services → Drivers/FFI → vendor DLL/SDK. Node remains only as build tooling and a Plugin Compatibility fallback until later phases.
+
+### C. Node → Rust mapping
+
+| Node responsibility | Rust destination |
+|---|---|
+| `rpc.ts` / `ipc/*` | typed `commands` and event adapters |
+| `nodeItem.ts` | `DeviceManager`, `Transport`, protocol services |
+| `docan/*` / `dolin/*` / `serial/*` / `doip/*` | `Transport` implementations |
+| `cantp.ts` / `lintp.ts` | shared `IsoTp` |
+| `uds.ts` / worker UDS | `Uds` service |
+| `vsomeip/*` | `SomeIp` service |
+| `replay/*` / `ostrace/*` | `Replay` / `Trace` services |
+| `workerClient.ts` / plugin SDK | `TaskRuntime` and `PluginCompat` |
+| `share/*` | versioned Core/UI wire schemas |
+
+### D. Recommended migration order
+
+Error → Logging → Config → EventBus → Task/Worker → DeviceManager → Discovery → Transport → CAN → LIN → Serial → ISO-TP → UDS → XCP → SOME/IP → PluginCompat → dual-run → Rust default → remove Node.
+
+### E. Module dependencies
+
+The detailed dependency graph is in `dependency-map.md`; Native crate boundaries are listed against each Node adapter, and `ipc/*` dependencies are separated into hardware/domain, host/tooling and plugin groups.
+
+### F. Risk levels
+
+The risk matrix is in `node-runtime-map.md`: `rpc/index`, `nodeItem`, `workerClient`, `ipc/uds` are P0; CAN/LIN/Serial/DoIP/SOME-IP are P1; replay/trace/tooling/share are P2.
+
+### G. Node fallback that must remain
+
+Keep Node fallback for generic RPC, `nodeItem`, worker/plugin SDK, UDS script API, CAN/LIN/Serial compatibility wrappers, SOME/IP worker, replay/trace and Python/package tooling until their Rust replacement has dual-run coverage.
+
+### H. Phase 02 scope
+
+Phase 02 is not started. After approval, it may create only the Rust Core contracts/skeleton and tests; it must not yet migrate business modules, delete Node, modify Native, change Vue, or alter plugin behavior.
