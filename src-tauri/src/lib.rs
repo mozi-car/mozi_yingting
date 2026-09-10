@@ -1,3 +1,4 @@
+pub mod core;
 mod bridge;
 mod hardware;
 
@@ -99,6 +100,7 @@ pub fn run() {
             Ok(())
         })
         .manage(PendingOpen(Mutex::new(None)))
+        .manage(core::Core::new())
         .plugin(local_resource_plugin())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(f) = first_mytproject_arg(&argv) {
