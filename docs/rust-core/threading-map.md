@@ -1,33 +1,111 @@
 # Threading and Lifecycle Map
 
-## Current threads/processes
+## Current process/thread topology
 
-| Execution unit | Owner | Work | Shutdown today | Rust Core destination |
+```text
+Tauri process
+├─ WebView renderer
+│  └─ invoke/events
+├─ SidecarBridge stdout reader thread
+├─ Sidecar child: node out/sidecar/index.cjs
+│  ├─ stdin readline/RPC event loop
+│  ├─ synchronous N-API driver calls
+│  ├─ native TSFN callbacks
+│  ├─ worker_threads: one UdsTester per script/test
+│  ├─ ostrace workers and timers
+│  └─ SOME/IP fork(vsomeip.js)
+│     └─ Rust SOME/IP receive thread
+├─ Windows PnP monitor thread
+└─ RunEvent::Exit -> bridge.shutdown()
+```
+
+## Concrete ownership table
+
+| Unit | Producer | Consumer | Message/lifecycle | Risk |
 |---|---|---|---|---|
-| Tauri main thread | `src-tauri` | window, commands, bridge state | Tauri RunEvent::Exit | Core runtime host |
-| Sidecar Node process | `bridge.rs` child | all Node business orchestration | JSON shutdown + child kill | temporary compatibility only |
-| Sidecar RPC reader | `bridge.rs` thread | stdout line parsing and pending response routing | ends with child stdout | Core command/event adapter |
-| Node RPC event loop | `rpc.ts` stdin readline | handler dispatch and response serialization | stdin close/shutdown | Tauri command/event layer |
-| Script Worker | `workerClient.ts` | user script/test execution | worker stop/exit/error | `core::task` + plugin compatibility |
-| SOME/IP worker process | `vsomeip/index.ts` / `worker.ts` | client/router compatibility and callbacks | stop/kill | `core::someip` task supervisor |
-| Native driver workers | Rust N-API crates | receive/cyclic/callback loops | module-specific stop/join | Core driver task handles |
-| Vector/CAN/LIN callbacks | native DLL callback boundary | vendor event delivery | callback unregister/drop | typed driver event source |
-| Windows PnP monitor | `hardware.rs` thread | USB arrival/removal | channel/registration Drop | `core::discovery` |
-| Trace worker | `ostrace/worker.ts` | trace parsing/streaming | worker stop | `core::trace` or UI-side parser |
+| SidecarBridge reader | `src-tauri/src/bridge.rs` | Tauri event/pending map | stdout JSON lines; ends on child exit | pending calls can timeout when child dies |
+| Sidecar RPC loop | `src/main/rpc.ts` | `ipcMain`-style handlers | `invoke`, `emit`, `ready`, `shutdown` | generic JSON loses type/cancel semantics |
+| Script worker | `src/main/workerClient.ts` | `NodeClass` handlers | `rpc_response`, `event`, stdout/stderr | worker can outlive device unless cancellation propagates |
+| Native CAN callback | Rust N-API TSFN | TS adapter/EventEmitter | frame/status/callback | high-rate IPC amplification |
+| LIN schedule worker | LIN adapters | `LinBase`, TP and logs | schedule/frame/pending response | stop/reopen ordering |
+| SOME/IP child | `vsomeip/index.ts` | parent client | process messages and callbacks | second process complicates shutdown |
+| PnP monitor | `src-tauri/hardware.rs` | Tauri events | mpsc `PnpEvent` | discovery only, no driver lifecycle |
+| Replay worker | `ostrace/worker.ts`, BLF/ASC | logs/UI | file stream/progress/end | backpressure and cancellation |
+| Plugin worker | `workerClient`/NodeClass | PluginClient | `plugin.<method>`, `pluginEvent` | compatibility contract |
 
-## Risks
+## Concrete event/message names
 
-1. Node and Rust can both own lifecycle state during dual-run migration; every handle needs one owner and an explicit close path.
-2. Tauri `spawn_blocking` currently waits synchronously for sidecar RPC with a 30-second timeout; high-rate or long-running operations must not use this path.
-3. Worker event handlers can outlive a NodeItem. Cancellation tokens must be propagated before Rust Core owns the worker.
-4. Vendor callbacks must never call Tauri directly. They should enqueue typed events into Core.
-5. Shutdown must stop periodic tasks, unregister callbacks, close transports, join workers, then terminate compatibility processes.
+### Sidecar/Tauri
 
-## Target runtime primitives
+- `ready`
+- `emit`
+- `yt-sidecar-event`
+- `hardware-added`
+- `hardware-removed`
+- `open-project`
 
-- `CancellationToken` per device/session/task;
-- `JoinSet` or equivalent supervisor for Core workers;
-- bounded `tokio::mpsc`/crossbeam channels for frame flow;
-- `oneshot` correlation for request/response;
-- `broadcast` shutdown signal;
-- explicit `DeviceHandle`, `TransportHandle` and `Subscription` ownership.
+### Device/protocol
+
+- `can-frame`
+- `lin-frame`
+- `data`
+- `serial-message`
+- `someip-frame`
+- `someip-service-valid`
+- `subscription`
+- `subscription_status`
+- `watchdog`
+- `trace`
+- `error`
+- `close`, `closed`, `exit`
+
+### Worker/plugin
+
+- `rpc_response`
+- `event`
+- `pluginEvent`
+- `__canMsg`
+- `__linMsg`
+- `__serialMsg`
+- `__someipMsg`
+- `__someipServiceValid`
+- `__varUpdate`
+- `__varFc`
+- `__keyDown`
+- `__end`
+
+## Target Rust lifecycle
+
+Every Core task/device must own:
+
+```text
+CancellationToken
+  -> stop receive/schedule loop
+  -> unregister vendor callback
+  -> close transport
+  -> join worker
+  -> publish DeviceState::Closed/Error
+```
+
+The target supervisor should use bounded channels, typed request/response correlation and a broadcast shutdown signal. Vendor callbacks enqueue into Core; they never call Tauri or Vue directly.
+
+## High-frequency paths
+
+CAN/LIN/Serial/XCP data must not use one Tauri IPC call per frame:
+
+```text
+Driver callback/read
+  -> bounded ring/channel
+  -> Rust TP/DAQ/aggregation/filter
+  -> batch FrameEvent or diagnostic response
+  -> Tauri event
+  -> Vue/plugin
+```
+
+## Verification per phase
+
+- Core task tests: cancellation, finish, cancel-all, join ordering.
+- Device tests: add/remove/open/close/state events and duplicate arrival handling.
+- Transport tests: open/send/receive/subscribe/close and timeout/error propagation.
+- Dual-run tests: Node and Rust receive identical scripted frames and compare events/errors.
+- Shutdown tests: repeat open/close/reopen and assert no pending task/callback remains.

@@ -1,47 +1,76 @@
 # Dependency Map
 
-## Runtime dependency graph
+## Current process graph
 
 ```text
-Vue renderer
-  └── Tauri invoke / event listener
-      └── src-tauri/src/bridge.rs
-          └── Node runtime: out/sidecar/index.cjs
-              ├── rpc.ts
-              ├── ipc/*
-              │   ├── nodeItem / device APIs
-              │   ├── filesystem/config/plugin APIs
-              │   └── serial/UDS/trace APIs
-              ├── nodeItem.ts
-              │   ├── docan/*
-              │   ├── dolin/*
-              │   ├── doip/*
-              │   ├── serial/*
-              │   ├── vsomeip/*
-              │   └── workerClient.ts
-              └── native.ts
-                  └── native/<module>.node
-                      └── vendor DLL / WinUSB / Windows API
+Vue / plugin UI
+  -> preload/shim
+  -> Tauri invoke/rpc_invoke
+  -> src-tauri/src/bridge.rs
+  -> child Node: out/sidecar/index.cjs
+  -> src/main/rpc.ts
+  -> src/main/ipc/* and nodeItem.ts
+  -> TypeScript domain adapters / workers
+  -> loadNative(name)
+  -> native/<name>.node Rust N-API
+  -> vendor DLL / WinUSB / Windows API
 ```
 
-## Domain dependencies
+## `src-tauri/src`
 
-| Domain | Current Node modules | Existing lower boundary | Target Core module |
+| Path | Responsibility | Dependencies | Future Core relation |
 |---|---|---|---|
-| Device discovery | `docan/can.ts`, `dolin/index.ts`, `doip/index.ts`, Tauri `hardware.rs` | Rust PnP + driver scan APIs | `device` + `discovery` |
-| CAN | `docan/base.ts`, vendor classes | `candle`, `peak`, `kvaser`, `zlg`, `vector`, `toomoss` | `transport::can` |
-| LIN | `dolin/base.ts`, vendor classes | `kvaserLin`, `peakLin`, `toomossLin`, Vector | `transport::lin` |
-| Serial | `serial/index.ts`, `serial/rust.ts` | `serial` Rust N-API | `transport::serial` |
-| DoIP | `doip/index.ts` | Node `net`/`dgram` | `transport::doip` |
-| ISO-TP | `docan/cantp.ts`, `dolin/lintp.ts` | CAN/LIN classes | `isotp` |
-| UDS | `docan/uds.ts`, `worker/uds.ts`, `ipc/uds.ts` | CAN-TP/LIN-TP/DoIP | `uds` |
-| SOME/IP | `vsomeip/client.ts`, `index.ts`, `worker.ts` | Rust SOME/IP N-API | `someip` |
-| Replay | `replay/ascReader.ts`, `blfReader.ts` | filesystem and frame APIs | `replay` |
-| Plugins | `pluginCilent.ts`, `ipc/plugin.ts`, `workerClient.ts` | Node worker/plugin API | `plugin::compat` |
+| `lib.rs` | Tauri setup, dialogs, local-resource protocol, single-instance, pending project | Tauri plugins, `bridge`, `hardware` | keep host-only; register Core later |
+| `bridge.rs` | Node child process, JSON stdin/stdout, pending RPC map, Tauri event forwarding | `serde_json`, `tauri`, bundled Node/runtime | temporary compatibility transport; eventually direct commands/events |
+| `hardware.rs` | Windows PnP USB arrival/removal and registry | cfgmgr32, mpsc, Tauri emitter | becomes `core::discovery` adapter |
+| `main.rs` | desktop entrypoint | `yingting_lib::run` | unchanged host entry |
 
-## Dependency constraints
+## Native crates
 
-- Core must depend on typed driver traits, not on N-API object shapes.
-- Native N-API crates can remain an adapter during migration, but Core should eventually call shared Rust driver interfaces directly or through a narrow FFI layer.
-- UI and plugins must not depend on vendor DLL names or `.node` paths.
-- `nodeItem` is a high fan-in legacy orchestrator and should be migrated by extracting services, not by translating the file wholesale.
+| Crate | API boundary | Current consumers | Target dependency |
+|---|---|---|---|
+| `native/candle` | SetupAPI/WinUSB CAN/CAN-FD | `docan/candle` | `drivers::candle`, then `Transport::Can` |
+| `native/peak` | PCAN-ISO-TP raw ABI | `docan/peak` | `drivers::peak`, then `Transport`/`IsoTp` |
+| `native/kvaser` | CANlib raw ABI | `docan/kvaser` | `drivers::kvaser` |
+| `native/zlg` | ZLG raw ABI | `docan/zlg` | `drivers::zlg` |
+| `native/vector` | XL CAN/CAN-FD/LIN raw ABI | docan/dolin/vector | `drivers::vector` |
+| `native/toomoss` | USB2XXX CAN-FD ABI | `docan/toomoss` | `drivers::toomoss` |
+| `native/kvaserLin` | LINlib ABI | `dolin/kvaser` | `drivers::kvaser_lin` |
+| `native/peakLin` | PLIN ABI | `dolin/peak`, ecubus | `drivers::peak_lin` |
+| `native/toomossLin` | USB2LIN ABI | `dolin/toomoss` | `drivers::toomoss_lin` |
+| `native/serial` | Windows serial API | `serial/rust` | `Transport::Serial` |
+| `native/secure-access` | SecureAccess seed/key DLL | `worker/secureAccess` | `core::uds::security` |
+| `native/vsomeip` | SOME/IP/SD Rust transport | `vsomeip/client` | `core::someip` |
+
+## `scripts/`
+
+| Script family | Responsibility | Migration impact |
+|---|---|---|
+| `build-native.mjs` | Cargo builds 12 N-API crates and copies `.node` artifacts | keep as development/package tooling until Node runtime removed |
+| `build-sidecar.mjs` | bundles `src/main/index.ts`, emits `vsomeip.js`, copies native artifacts | removed only after Node runtime removal |
+| `build-cli.mjs` | bundles CLI and synchronizes native resources | keep as CLI/tooling; later point CLI to Rust Core |
+| `check-native-api.mjs` | runtime export/API parity | retain as driver regression or replace with Rust integration tests |
+| `native-interface-regression.mjs` | complete N-API boundary checks | retain during dual-run |
+| `native-regression.mjs`, `vendor-dll-regression.mjs`, `vendor-smoke.mjs` | missing-DLL/error/vendor smoke | become driver CI gates |
+| `verify-zero-cpp.mjs`, `native-audit.mjs` | active tree and call-chain policy | retain as migration gates |
+| `vector-e2e.mjs`, `vsomeip-regression.mjs`, `secure-access-regression.mjs` | module-specific regression | retain and add Core-level equivalents |
+
+## Target dependency graph
+
+```text
+core::runtime
+  ├── core::error / logger / config
+  ├── core::event_bus / task
+  ├── core::device / discovery
+  ├── core::transport
+  │   ├── can / lin / serial / doip
+  │   └── drivers::*
+  ├── core::isotp
+  ├── core::uds
+  ├── core::xcp
+  ├── core::someip
+  ├── core::replay
+  └── core::plugin::compat
+```
+
+Dependencies flow downward: UI/commands → Core services → transport/protocol → driver/FFI. Core must not depend on Node module paths or vendor-specific TypeScript classes.
